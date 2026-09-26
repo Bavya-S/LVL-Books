@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LVL Books">
+<title>LVL Books</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{
+  --bg:#0b0d12; --panel:#12151c; --panel2:#171b24; --line:#232838;
+  --neon:#4be8ff; --neon2:#b26bff; --pink:#ff4b91; --green:#3ce27a; --amber:#ffc857; --red:#ff5c5c;
+  --text:#e8ebf5; --muted:#8b93a8;
+}
+:root:not([data-theme="light"]){ }
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f4f6fb; --panel:#ffffff; --panel2:#eef1f8; --line:#dde3f0;
+    --neon:#0f8fae; --neon2:#7a3fd1; --pink:#d1216c; --green:#1f9d57; --amber:#b5790a; --red:#c23b3b;
+    --text:#12151c; --muted:#5b6478;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#f4f6fb; --panel:#ffffff; --panel2:#eef1f8; --line:#dde3f0;
+  --neon:#0f8fae; --neon2:#7a3fd1; --pink:#d1216c; --green:#1f9d57; --amber:#b5790a; --red:#c23b3b;
+  --text:#12151c; --muted:#5b6478;
+}
+*{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:calc(76px + env(safe-area-inset-bottom,0px));-webkit-tap-highlight-color:transparent}
+h1,h2,h3{margin:0 0 8px}
+.app{max-width:520px;margin:0 auto;padding:10px 14px 8px}
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:linear-gradient(180deg,#0b0d12 85%,transparent);display:flex;align-items:center;justify-content:space-between;margin:0 -14px 10px;padding:10px 14px 6px}
+.brand{font-weight:800;letter-spacing:.5px}
+.brand span{color:var(--neon);text-shadow:0 0 12px rgba(75,232,255,.6)}
+#installBtn{display:none;background:var(--panel2);border:1px solid var(--neon);color:var(--neon);border-radius:10px;padding:6px 10px;font-size:12px}
+#themeBtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:6px 10px;font-size:14px;margin-left:6px}
+.topbar-actions{display:flex;align-items:center}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+.card.glow{box-shadow:0 0 0 1px var(--line), 0 8px 24px rgba(75,232,255,.06)}
+.row{display:flex;gap:10px}
+.col{flex:1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px}
+.stat .v{font-size:19px;font-weight:800}
+.stat .l{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.muted{color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:13px 14px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;width:100%;min-height:46px}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:linear-gradient(135deg,var(--neon),var(--neon2));color:#080a10;border:none}
+.btn.pink{background:linear-gradient(135deg,var(--pink),var(--neon2));color:#080a10;border:none}
+.btn.green{background:linear-gradient(135deg,var(--green),#1c8f52);color:#08120a;border:none}
+.btn.ghost{background:transparent}
+.btn.sm{padding:9px 10px;font-size:13px;width:auto;min-height:38px}
+.qa{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:12px;border-radius:10px;font-size:16px}
+label{font-size:12px;color:var(--muted);display:block;margin:8px 0 4px}
+.pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.pill.green{background:rgba(60,226,122,.15);color:var(--green)}
+.pill.amber{background:rgba(255,200,87,.15);color:var(--amber)}
+.pill.red{background:rgba(255,92,92,.15);color:var(--red)}
+.pill.neon{background:rgba(75,232,255,.15);color:var(--neon)}
+.list-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.list-item:last-child{border-bottom:none}
+.navbar{position:fixed;left:0;right:0;bottom:0;background:#0d1017;border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom,0px);z-index:10}
+.navbtn{flex:1;text-align:center;padding:9px 2px;color:var(--muted);font-size:10.5px;background:none;border:none;min-height:52px}
+.navbtn.active{color:var(--neon)}
+.navbtn .ic{font-size:19px;display:block}
+.section-title{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:14px 0 6px}
+.chip{display:inline-flex;padding:9px 13px;border-radius:20px;border:1px solid var(--line);background:var(--panel2);margin:4px 6px 4px 0;font-size:13px}
+.chip.sel{border-color:var(--neon);color:var(--neon);box-shadow:0 0 0 1px var(--neon) inset}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;display:flex;align-items:flex-end}
+.modal{background:var(--panel);border-top-left-radius:20px;border-top-right-radius:20px;width:100%;max-width:520px;margin:0 auto;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));max-height:88vh;overflow:auto;border:1px solid var(--line)}
+.close{float:right;background:none;border:none;color:var(--muted);font-size:20px;min-height:30px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:6px 4px;text-align:left;border-bottom:1px solid var(--line)}
+.right{text-align:right}
+.total-row{font-weight:800;font-size:16px}
+.timer{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted)}
+.empty{text-align:center;padding:30px 10px;color:var(--muted)}
+.bar-row{margin:6px 0}
+.bar-track{background:var(--panel2);border-radius:8px;height:10px;overflow:hidden;margin-top:3px}
+.bar-fill{height:100%;background:linear-gradient(90deg,var(--neon),var(--neon2));border-radius:8px}
+::-webkit-scrollbar{width:0;height:0}
+</style>
+</head>
+<body>
+<div id="root" class="app"></div>
+<div id="modalRoot"></div>
+<div class="navbar" id="navbar"></div>
+
+<script>
+/* ============ IndexedDB ============ */
+let db;
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r = indexedDB.open('lvlbooks', 3);
+    r.onupgradeneeded = e=>{
+      const d = e.target.result;
+      const ensure = (name, opts)=>{ if(!d.objectStoreNames.contains(name)) d.createObjectStore(name, opts); };
+      ensure('customers',{keyPath:'mobile'});
+      ensure('sessions',{keyPath:'id',autoIncrement:true});
+      ensure('invoices',{keyPath:'id',autoIncrement:true});
+      ensure('products',{keyPath:'id',autoIncrement:true});
+      ensure('expenses',{keyPath:'id',autoIncrement:true});
+      ensure('settings',{keyPath:'key'});
+      ensure('vendors',{keyPath:'id',autoIncrement:true});
+      ensure('purchases',{keyPath:'id',autoIncrement:true});
+      ensure('employees',{keyPath:'id',autoIncrement:true});
+      ensure('employeeTx',{keyPath:'id',autoIncrement:true});
+      ensure('accounts',{keyPath:'name'});
+      ensure('dailyRecords',{keyPath:'date'});
+    };
+    r.onsuccess = e=>{db=e.target.result; res(db)};
+    r.onerror = e=>rej(e);
+  });
+}
+function tx(store,mode){ return db.transaction(store,mode).objectStore(store) }
+function dbAll(store){ return new Promise((res,rej)=>{ const rq=tx(store,'readonly').getAll(); rq.onsuccess=()=>res(rq.result); rq.onerror=rej }) }
+function dbGet(store,key){ return new Promise((res,rej)=>{ const rq=tx(store,'readonly').get(key); rq.onsuccess=()=>res(rq.result); rq.onerror=rej }) }
+function dbPut(store,val){ return new Promise((res,rej)=>{ const rq=tx(store,'readwrite').put(val); rq.onsuccess=()=>res(rq.result); rq.onerror=rej }) }
+function dbDel(store,key){ return new Promise((res,rej)=>{ const rq=tx(store,'readwrite').delete(key); rq.onsuccess=()=>res(rq.result); rq.onerror=rej }) }
+function dbClear(store){ return new Promise((res,rej)=>{ const rq=tx(store,'readwrite').clear(); rq.onsuccess=()=>res(); rq.onerror=rej }) }
+
+/* ============ Static catalog / pricing data layer ============ */
+const CONSOLE_CONFIGS = {
+  PS4_55:   { console:'PS4',     tv:'55" 4K TV',          rates:{1:[120,60], 2:[190,95],  3:[260,130], 4:[340,170]} },
+  PS5_55:   { console:'PS5',     tv:'55" 4K Neo QLED TV', rates:{1:[140,70], 2:[230,115], 3:[320,160], 4:[420,210]} },
+  PS5_65:   { console:'PS5',     tv:'65" 4K QLED TV',     rates:{1:[160,80], 2:[270,135], 3:[380,190], 4:[500,250]} },
+  PS5PRO_65:{ console:'PS5 Pro', tv:'65" 4K QLED TV',     rates:{1:[180,90], 2:[310,155], 3:[440,220], 4:[580,290]} },
+};
+const CONSOLE_OPTIONS = { PS4:['PS4_55'], PS5:['PS5_55','PS5_65'], 'PS5 Pro':['PS5PRO_65'] };
+const DEFAULT_PRODUCTS = [
+ {name:'Classic Fries',cat:'Veg Bites',price:95,stock:50,min:10},
+ {name:'Peri Peri Fries',cat:'Veg Bites',price:100,stock:50,min:10},
+ {name:'Veg Nuggets (6 pcs)',cat:'Veg Bites',price:120,stock:40,min:10},
+ {name:'Veg Fingers (6 pcs)',cat:'Veg Bites',price:120,stock:40,min:10},
+ {name:'Fried Paneer Momos (6 pcs)',cat:'Veg Bites',price:130,stock:30,min:10},
+ {name:'Chicken Cup Noodles',cat:'Non-Veg Delights',price:80,stock:40,min:10},
+ {name:'Chicken Bites (6 pcs)',cat:'Non-Veg Delights',price:120,stock:40,min:10},
+ {name:'Fried Chicken Momos (6 pcs)',cat:'Non-Veg Delights',price:140,stock:30,min:10},
+ {name:'Chicken Loaded Fries',cat:'Non-Veg Delights',price:150,stock:30,min:10},
+ {name:'Chicken Popcorn (12 pcs)',cat:'Non-Veg Delights',price:160,stock:30,min:10},
+ {name:'Chicken Nuggets (8 pcs)',cat:'Non-Veg Delights',price:160,stock:30,min:10},
+ {name:'Sprite',cat:'Beverages',price:20,stock:100,min:20},
+ {name:'Fanta',cat:'Beverages',price:20,stock:100,min:20},
+ {name:'Pepsi',cat:'Beverages',price:20,stock:100,min:20},
+ {name:'Mazza',cat:'Beverages',price:20,stock:100,min:20},
+ {name:'Veg Combo',cat:'Combos',price:249,ref:300,stock:999,min:0,combo:'veg'},
+ {name:'Non-Veg Combo',cat:'Combos',price:299,ref:350,stock:999,min:0,combo:'nonveg'},
+];
+const BEVERAGES = ['Sprite','Fanta','Pepsi','Mazza'];
+const DEFAULT_SETTINGS = {
+  businessName:'LVL Gaming Café', phone:'', address:'', gstin:'',
+  invoicePrefix:'LVL-INV-', nextInvoiceNo:1,
+  accompanyHourRate:50, accompanyHalfRate:25,
+  taxEnabled:false, taxRate:0,
+  footer:'Thank you for choosing LVL Gaming Café! See you again! 🎮'
+};
+const DEFAULT_ACCOUNTS = ['Cash','UPI','Bank','Card','Other'].map(n=>({name:n, balance:0}));
+const PAY_TO_ACCOUNT = {'Cash':'Cash','UPI':'UPI','Card':'Card','Bank Transfer':'Bank','Other':'Other'};
+
+/* ============ Billing math ============ */
+function chargeFor(minutes, hourRate, halfRate){
+  const hours = Math.floor(minutes/60); const rem = minutes % 60;
+  return hours*hourRate + (rem===30 ? halfRate : 0);
+}
+function fmt(n){ return '₹' + Math.round(n||0).toLocaleString('en-IN') }
+function fmtDur(mins){ const h=Math.floor(mins/60), m=mins%60; return (h?h+'h ':'') + (m?m+'m':'') || '0m'; }
+function todayStr(){ return new Date().toDateString(); }
+function isToday(ts){ return new Date(ts).toDateString()===todayStr(); }
+function startOfWeek(){ const d=new Date(); const day=d.getDay(); d.setHours(0,0,0,0); d.setDate(d.getDate()-day); return d.getTime(); }
+function startOfMonth(){ const d=new Date(); d.setDate(1); d.setHours(0,0,0,0); return d.getTime(); }
+function inRange(ts, range, custStart, custEnd){
+  if(range==='today') return isToday(ts);
+  if(range==='week') return ts>=startOfWeek();
+  if(range==='month') return ts>=startOfMonth();
+  if(range==='custom') return ts>=custStart && ts<=custEnd;
+  return true;
+}
+
+/* ============ CSV export ============ */
+function toCSV(rows){
+  if(!rows || !rows.length) return 'no data\n';
+  const headers = Object.keys(rows[0]);
+  const esc = v=>{ if(v===undefined||v===null) return ''; v = typeof v==='object'? JSON.stringify(v): String(v); if(/[",\n]/.test(v)) v = '"'+v.replace(/"/g,'""')+'"'; return v; };
+  return [headers.join(','), ...rows.map(r=>headers.map(h=>esc(r[h])).join(','))].join('\n');
+}
+function downloadCSV(filename, rows){
+  const blob = new Blob([toCSV(rows)], {type:'text/csv'});
+  const url = URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=filename; a.click();
+}
+async function exportAllCSV(){
+  const stores = ['customers','sessions','invoices','products','expenses','vendors','purchases','employees'];
+  for(const s of stores){ downloadCSV(`LVL-${s}.csv`, await dbAll(s)); await new Promise(r=>setTimeout(r,250)); }
+}
+
+/* ============ App state ============ */
+let state = { screen:'dashboard', settings:null, custProfile:null, vendorId:null, reportRange:'today', reportStart:null, reportEnd:null };
+
+async function boot(){
+  initTheme();
+  await openDB();
+  if(navigator.storage && navigator.storage.persist){ try{ const granted = await navigator.storage.persist(); console.log('Persistent storage:', granted); }catch(e){} }
+  let s = await dbGet('settings','main');
+  if(!s){ s = {key:'main', ...DEFAULT_SETTINGS}; await dbPut('settings', s); }
+  state.settings = s;
+  const prods = await dbAll('products');
+  if(prods.length===0){ for(const p of DEFAULT_PRODUCTS){ await dbPut('products', p); } }
+  const accs = await dbAll('accounts');
+  if(accs.length===0){ for(const a of DEFAULT_ACCOUNTS){ await dbPut('accounts', a); } }
+  setupManifestAndInstall();
+  render();
+}
+function initTheme(){
+  let saved = null;
+  try{ saved = localStorage.getItem('lvl_theme'); }catch(e){}
+  const theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  document.documentElement.setAttribute('data-theme', theme);
+}
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = cur==='dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try{ localStorage.setItem('lvl_theme', next); }catch(e){}
+  render();
+}
+function dateKey(ts){ const d=new Date(ts); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function monthKey(dateStr){ return dateStr.slice(0,7); } // YYYY-MM from a YYYY-MM-DD dailyRecords date
+function weekKey(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  const onejan = new Date(d.getFullYear(),0,1);
+  const week = Math.ceil((((d-onejan)/86400000)+onejan.getDay()+1)/7);
+  return d.getFullYear()+'-W'+String(week).padStart(2,'0');
+}
+function aggregateDaily(records, keyFn, limit){
+  const map = {};
+  records.forEach(r=>{ const k=keyFn(r.date); if(!map[k]) map[k]={key:k, sales:0, expenses:0}; map[k].sales+=r.sales; map[k].expenses+=r.expenses; });
+  return Object.values(map).sort((a,b)=>a.key.localeCompare(b.key)).slice(-limit);
+}
+async function updateDailyRecord(dateStr){
+  const invoices = (await dbAll('invoices')).filter(i=>dateKey(i.date)===dateStr);
+  const expenses = (await dbAll('expenses')).filter(e=>!e.isTemplate && dateKey(e.date)===dateStr);
+  const sales = invoices.reduce((s,i)=>s+i.grandTotal,0);
+  const exp = expenses.reduce((s,e)=>s+e.amount,0);
+  const gamingRev = invoices.reduce((s,i)=>s+i.gamingAmount+i.accompanyAmount,0);
+  const foodRev = invoices.reduce((s,i)=>s+i.foodAmount,0);
+  await dbPut('dailyRecords', { date: dateStr, sales, expenses:exp, net: sales-exp, gamingRev, foodRev, invoiceCount: invoices.length, expenseCount: expenses.length, updatedAt: Date.now() });
+}
+async function rebuildDailyRecords(){
+  const invoices = await dbAll('invoices'); const expenses = await dbAll('expenses');
+  const days = new Set([...invoices.map(i=>dateKey(i.date)), ...expenses.filter(e=>!e.isTemplate).map(e=>dateKey(e.date))]);
+  for(const d of days){ await updateDailyRecord(d); }
+}
+async function exportDayDetail(dateStr){
+  const invoices = (await dbAll('invoices')).filter(i=>dateKey(i.date)===dateStr);
+  const expenses = (await dbAll('expenses')).filter(e=>!e.isTemplate && dateKey(e.date)===dateStr);
+  const sessions = (await dbAll('sessions')).filter(s=>dateKey(s.startTime)===dateStr);
+  const blob = new Blob([JSON.stringify({date:dateStr, invoices, expenses, sessions}, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href = url; a.download = `LVL-Books-Day-${dateStr}.json`; a.click();
+}
+function setupManifestAndInstall(){
+  // manifest.json and icons are linked as real static files in <head> for this local/production build.
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(err=>console.warn('Service worker registration failed:', err));
+  }
+  window.deferredInstallPrompt = null;
+  window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); window.deferredInstallPrompt=e; const b=document.getElementById('installBtn'); if(b) b.style.display='inline-block'; });
+}
+async function triggerInstall(){
+  if(window.deferredInstallPrompt){ window.deferredInstallPrompt.prompt(); window.deferredInstallPrompt=null; document.getElementById('installBtn').style.display='none'; }
+  else alert('On iPhone/iPad: tap the Share icon in Safari, then "Add to Home Screen".\nOn Android Chrome: tap the ⋮ menu, then "Add to Home Screen" / "Install app".');
+}
+
+/* ============ Navigation ============ */
+const NAV = [
+  {id:'dashboard', ic:'🏠', label:'Dashboard'},
+  {id:'gaming', ic:'🎮', label:'Gaming'},
+  {id:'inventory', ic:'📦', label:'Inventory'},
+  {id:'invoices', ic:'🧾', label:'Invoices'},
+  {id:'more', ic:'⋯', label:'More'},
+];
+function renderNav(){
+  document.getElementById('navbar').innerHTML = NAV.map(n=>`
+    <button class="navbtn ${state.screen===n.id?'active':''}" onclick="go('${n.id}')"><span class="ic">${n.ic}</span>${n.label}</button>`).join('');
+}
+function go(screen){ state.screen=screen; render(); }
+function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
+function openModal(html){ document.getElementById('modalRoot').innerHTML = `<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`; }
+
+async function render(){
+  renderNav();
+  const root = document.getElementById('root');
+  root.innerHTML = `<div class="topbar"><div class="brand">LVL <span>BOOKS</span></div><div class="topbar-actions"><button id="installBtn" style="display:none" onclick="triggerInstall()">⬇️ Install</button><button id="themeBtn" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'🌙':'☀️'}</button></div></div>`;
+  const map = { dashboard:screenDashboard, gaming:screenGaming, inventory:screenInventory, invoices:screenInvoices, more:screenMore,
+    customers:screenCustomers, customerProfile:screenCustomerProfile, expenses:screenExpenses, settings:screenSettings, backup:screenBackup,
+    vendors:screenVendors, vendorProfile:screenVendorProfile, purchases:screenPurchases, employees:screenEmployees, employeeProfile:screenEmployeeProfile,
+    cashbank:screenCashBank, reports:screenReports };
+  const fn = map[state.screen] || screenDashboard;
+  root.innerHTML += await fn();
+  if(window.deferredInstallPrompt) document.getElementById('installBtn').style.display='inline-block';
+}
+
+/* ============ Dashboard ============ */
+async function screenDashboard(){
+  const invoices = await dbAll('invoices');
+  const expenses = (await dbAll('expenses')).filter(e=>!e.isTemplate);
+  const sessions = await dbAll('sessions');
+  const todayInv = invoices.filter(i=>isToday(i.date));
+  const todayExp = expenses.filter(e=>isToday(e.date));
+  const gamingRev = todayInv.reduce((s,i)=>s+i.gamingAmount+i.accompanyAmount,0);
+  const foodRev = todayInv.reduce((s,i)=>s+i.foodAmount,0);
+  const salesTotal = todayInv.reduce((s,i)=>s+i.grandTotal,0);
+  const expTotal = todayExp.reduce((s,e)=>s+e.amount,0);
+  const active = sessions.filter(s=>s.status==='active');
+  const lowStock = (await dbAll('products')).filter(p=>p.combo===undefined && p.stock<=p.min);
+  const recTemplates = (await dbAll('expenses')).filter(e=>e.isTemplate && e.nextDue<=Date.now());
+
+  return `
+  <div class="section-title">Today's Summary</div>
+  <div class="grid2">
+    <div class="stat"><div class="v">${fmt(salesTotal)}</div><div class="l">Sales</div></div>
+    <div class="stat"><div class="v">${fmt(expTotal)}</div><div class="l">Expenses</div></div>
+    <div class="stat"><div class="v">${fmt(salesTotal-expTotal)}</div><div class="l">Net</div></div>
+    <div class="stat"><div class="v">${fmt(gamingRev)}</div><div class="l">Gaming Revenue</div></div>
+    <div class="stat"><div class="v">${fmt(foodRev)}</div><div class="l">Food & Beverage</div></div>
+    <div class="stat"><div class="v">${active.length}</div><div class="l">Active Sessions</div></div>
+  </div>
+  <div class="section-title">Quick Actions</div>
+  <div class="qa">
+    <button class="btn primary" onclick="startGamingFlow()">🎮 Start Gaming</button>
+    <button class="btn" onclick="go('expenses')">💸 Add Expense</button>
+    <button class="btn" onclick="go('customers')">👤 Customers</button>
+    <button class="btn" onclick="go('reports')">📊 Reports</button>
+  </div>
+  ${recTemplates.length? `<div class="section-title">⏰ Recurring Due</div><div class="card">${recTemplates.map(r=>`<div class="list-item"><span>${r.category} · ${fmt(r.amount)}</span><button class="btn sm" onclick="logRecurring(${r.id})">Log Payment</button></div>`).join('')}</div>`:''}
+  ${lowStock.length? `<div class="section-title">⚠️ Low Stock</div><div class="card">${lowStock.map(p=>`<div class="list-item"><span>${p.name}</span><span class="pill amber">${p.stock} left</span></div>`).join('')}</div>` : ''}
+  ${active.length? `<div class="section-title">Active Sessions</div>` + active.map(s=>sessionCard(s)).join('') : `<div class="empty">No gaming sessions right now.</div>`}
+  `;
+}
+
+/* ============ Gaming ============ */
+async function screenGaming(){
+  const sessions = (await dbAll('sessions')).filter(s=>s.status==='active');
+  return `
+  <button class="btn primary" style="margin-bottom:12px" onclick="startGamingFlow()">➕ Start Gaming Session</button>
+  ${sessions.length ? sessions.map(sessionCard).join('') : '<div class="empty">No gaming sessions today.</div>'}
+  `;
+}
+function sessionCard(s){
+  const cfg = CONSOLE_CONFIGS[s.configKey];
+  const gaming = chargeFor(s.billableMinutes, cfg.rates[s.players][0], cfg.rates[s.players][1]);
+  const foodTotal = s.items.reduce((sum,it)=>sum+it.price*it.qty,0);
+  return `<div class="card glow" data-session-id="${s.id}">
+    <div class="row" style="justify-content:space-between">
+      <div><b>${cfg.console}</b> · ${cfg.tv}<br><span class="muted">${s.players} Player(s)</span></div>
+      <div class="pill neon">LIVE</div>
+    </div>
+    <div class="timer" id="timerText-${s.id}">Billed: ${fmtDur(s.billableMinutes)}</div>
+    <div style="margin:8px 0;font-size:22px;font-weight:800">${fmt(gaming+foodTotal)}</div>
+    ${s.items.length?`<div class="muted" style="font-size:12px;margin-bottom:8px">Food: ${s.items.map(i=>i.name+' x'+i.qty).join(', ')}</div>`:''}
+    <div class="grid2">
+      <button class="btn sm" onclick="extendSession(${s.id},30)">+30 MIN</button>
+      <button class="btn sm" onclick="extendSession(${s.id},60)">+1 HOUR</button>
+      <button class="btn sm" onclick="addFoodModal(${s.id})">🍟 Food Items</button>
+      <button class="btn sm pink" onclick="endSession(${s.id})">END SESSION</button>
+    </div>
+  </div>`;
+}
+
+/* ---- Live countdown ticker + expiry alert ---- */
+const expiredAlerted = {};
+function beep(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    for(let i=0;i<3;i++){
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination);
+      const t = ctx.currentTime + i*0.35;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t+0.02); g.gain.exponentialRampToValueAtTime(0.0001, t+0.3);
+      o.start(t); o.stop(t+0.32);
+    }
+    setTimeout(()=>ctx.close(), 1200);
+  }catch(e){}
+}
+function fmtClock(totalSec){
+  const neg = totalSec<0; const a = Math.abs(totalSec);
+  const m = Math.floor(a/60), sec = a%60;
+  return (neg?'-':'') + String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+}
+function showExpiryBanner(sessionId, cfg){
+  if(document.getElementById('expiryBanner-'+sessionId)) return;
+  const el = document.createElement('div');
+  el.id = 'expiryBanner-'+sessionId;
+  el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:30;background:linear-gradient(135deg,var(--pink),var(--neon2));color:#080a10;padding:14px;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.4);max-width:492px;margin:0 auto';
+  el.innerHTML = `<b>⏰ Time's up — ${cfg.console} ${cfg.tv}</b><div style="margin-top:8px;display:flex;gap:8px">
+    <button class="btn sm" style="flex:1;background:#0009;color:#fff;border:none" onclick="extendSession(${sessionId},30); document.getElementById('expiryBanner-${sessionId}').remove()">+30 MIN</button>
+    <button class="btn sm" style="flex:1;background:#0009;color:#fff;border:none" onclick="extendSession(${sessionId},60); document.getElementById('expiryBanner-${sessionId}').remove()">+1 HOUR</button>
+    <button class="btn sm" style="flex:1;background:#0009;color:#fff;border:none" onclick="document.getElementById('expiryBanner-${sessionId}').remove(); endSession(${sessionId})">END</button>
+  </div>`;
+  document.body.appendChild(el);
+}
+async function tickSessions(){
+  let sessions;
+  try{ sessions = (await dbAll('sessions')).filter(s=>s.status==='active'); }catch(e){ return; }
+  sessions.forEach(s=>{
+    const el = document.getElementById('timerText-'+s.id);
+    if(!el) return;
+    const elapsedSec = Math.floor((Date.now()-s.startTime)/1000);
+    const remaining = s.billableMinutes*60 - elapsedSec;
+    if(remaining >= 0){
+      el.innerHTML = `Time Left: <b>${fmtClock(remaining)}</b> &nbsp;|&nbsp; Billed: ${fmtDur(s.billableMinutes)}`;
+      el.style.color = remaining<120 ? 'var(--amber)' : '';
+      delete expiredAlerted[s.id];
+    } else {
+      el.innerHTML = `<span style="color:var(--red);font-weight:800">OVERTIME ${fmtClock(remaining)}</span> &nbsp;|&nbsp; Billed: ${fmtDur(s.billableMinutes)}`;
+      if(!expiredAlerted[s.id]){
+        expiredAlerted[s.id] = true;
+        beep();
+        showExpiryBanner(s.id, CONSOLE_CONFIGS[s.configKey]);
+      }
+    }
+  });
+  document.querySelectorAll('[id^="expiryBanner-"]').forEach(b=>{
+    const id = Number(b.id.replace('expiryBanner-',''));
+    if(!sessions.find(s=>s.id===id)) b.remove();
+  });
+}
+setInterval(tickSessions, 1000);
+
+function startGamingFlow(){
+  let sel = {console:null, cfg:null, players:null};
+  const renderPicker = ()=>{
+    openModal(`
+      <button class="close" onclick="closeModal()">✕</button>
+      <h3>Start Gaming Session</h3>
+      <label>Console</label>
+      <div>${Object.keys(CONSOLE_OPTIONS).map(c=>`<span class="chip ${sel.console===c?'sel':''}" onclick="pickConsole('${c}')">${c}</span>`).join('')}</div>
+      ${sel.console && CONSOLE_OPTIONS[sel.console].length>1 ? `
+      <label>TV / Screen</label>
+      <div>${CONSOLE_OPTIONS[sel.console].map(k=>`<span class="chip ${sel.cfg===k?'sel':''}" onclick="pickCfg('${k}')">${CONSOLE_CONFIGS[k].tv}</span>`).join('')}</div>` : ''}
+      <label>Number of Players</label>
+      <div>${[1,2,3,4].map(p=>`<span class="chip ${sel.players===p?'sel':''}" onclick="pickPlayers(${p})">${p}</span>`).join('')}</div>
+      <button class="btn primary" style="margin-top:14px" onclick="confirmStart()" ${(!sel.cfg||!sel.players)?'disabled style="opacity:.4"':''}>START SESSION</button>
+    `);
+  };
+  window.pickConsole = (c)=>{ sel.console=c; sel.cfg = CONSOLE_OPTIONS[c].length===1?CONSOLE_OPTIONS[c][0]:null; renderPicker(); };
+  window.pickCfg = (k)=>{ sel.cfg=k; renderPicker(); };
+  window.pickPlayers = (p)=>{ sel.players=p; renderPicker(); };
+  window.confirmStart = async ()=>{
+    if(!sel.cfg||!sel.players) return;
+    // Business rule: every session starts with a mandatory 1-hour minimum charge.
+    // Staff can extend by +30 MIN or +1 HOUR any number of times after that — there is no 30-minute-only start.
+    await dbPut('sessions', { configKey:sel.cfg, players:sel.players, startTime:Date.now(), billableMinutes:60, items:[], status:'active' });
+    closeModal(); state.screen='gaming'; render();
+  };
+  renderPicker();
+}
+async function extendSession(id, mins){ const s = await dbGet('sessions', id); s.billableMinutes += mins; await dbPut('sessions', s); render(); }
+async function addFoodModal(sessionId){
+  const products = await dbAll('products');
+  const cats = [...new Set(products.map(p=>p.cat))];
+  const s = await dbGet('sessions', sessionId);
+  openModal(`
+    <button class="close" onclick="closeModal(); render();">✕</button>
+    <h3>Manage Food & Beverages</h3>
+    <div class="section-title">Current Items in this Session</div>
+    <div id="curItems">${currentItemsHtml(s)}</div>
+    <div class="section-title">Add Item</div>
+    ${cats.map(cat=>`
+      <div class="section-title">${cat}</div>
+      ${products.filter(p=>p.cat===cat).map(p=>`
+        <div class="list-item"><span>${p.name}${p.ref?`<br><span class="muted" style="font-size:11px">was ${fmt(p.ref)}</span>`:''}</span>
+        <span>${fmt(p.price)} <button class="btn sm" style="width:auto" onclick="${p.combo?`comboAdd(${sessionId},${p.id})`:`quickAdd(${sessionId},${p.id})`}">+ Add</button></span></div>
+      `).join('')}
+    `).join('')}
+  `);
+}
+function currentItemsHtml(s){
+  if(!s.items.length) return '<div class="muted" style="margin-bottom:8px">No food or beverages added yet.</div>';
+  return s.items.map((it,idx)=>`
+    <div class="list-item"><div>${it.name}${it.beverages?`<br><span class="muted" style="font-size:11px">${it.beverages.join(' + ')}</span>`:''}</div>
+    <div class="row" style="gap:6px;align-items:center">
+      <button class="btn sm" onclick="changeItemQty(${s.id},${idx},-1)">−</button>
+      <span style="min-width:18px;text-align:center">${it.qty}</span>
+      <button class="btn sm" onclick="changeItemQty(${s.id},${idx},1)">+</button>
+      <button class="btn sm" style="border-color:var(--red);color:var(--red)" onclick="removeItem(${s.id},${idx})">✕</button>
+    </div></div>`).join('');
+}
+async function refreshCurItems(sessionId){
+  const s = await dbGet('sessions', sessionId);
+  const el = document.getElementById('curItems');
+  if(el) el.innerHTML = currentItemsHtml(s);
+}
+async function changeItemQty(sessionId, idx, delta){
+  const s = await dbGet('sessions', sessionId);
+  const it = s.items[idx]; if(!it) return;
+  it.qty = Math.max(1, it.qty+delta);
+  await dbPut('sessions', s);
+  refreshCurItems(sessionId);
+}
+async function removeItem(sessionId, idx){
+  const s = await dbGet('sessions', sessionId);
+  s.items.splice(idx,1);
+  await dbPut('sessions', s);
+  refreshCurItems(sessionId);
+}
+async function quickAdd(sessionId, prodId){
+  const s = await dbGet('sessions', sessionId); const p = await dbGet('products', prodId);
+  const existing = s.items.find(i=>i.productId===prodId && !i.combo);
+  if(existing) existing.qty += 1; else s.items.push({productId:p.id, name:p.name, price:p.price, qty:1});
+  await dbPut('sessions', s); refreshCurItems(sessionId);
+}
+function comboAdd(sessionId, prodId){
+  let bevs = [null,null];
+  const draw = ()=>{ openModal(`
+      <button class="close" onclick="closeModal()">✕</button>
+      <h3>Choose 2 Beverages</h3>
+      <label>Beverage 1</label><div>${BEVERAGES.map(b=>`<span class="chip ${bevs[0]===b?'sel':''}" onclick="setBev(0,'${b}')">${b}</span>`).join('')}</div>
+      <label>Beverage 2</label><div>${BEVERAGES.map(b=>`<span class="chip ${bevs[1]===b?'sel':''}" onclick="setBev(1,'${b}')">${b}</span>`).join('')}</div>
+      <button class="btn primary" style="margin-top:14px" onclick="confirmCombo(${sessionId},${prodId})" ${(!bevs[0]||!bevs[1])?'disabled style="opacity:.4"':''}>Add Combo</button>
+    `); };
+  window.setBev=(i,b)=>{bevs[i]=b; draw();};
+  window.confirmCombo = async (sid,pid)=>{
+    const s = await dbGet('sessions', sid); const p = await dbGet('products', pid);
+    s.items.push({productId:p.id, name:p.name, price:p.price, qty:1, combo:true, beverages:[bevs[0],bevs[1]]});
+    await dbPut('sessions', s); addFoodModal(sid);
+  };
+  draw();
+}
+async function endSession(sessionId){
+  const settings = state.settings;
+  const form = { name:'', mobile:'', accompany:0, parentChild:false, discount:0, payMethod:'Cash' };
+  const s = await dbGet('sessions', sessionId);
+  const cfg = CONSOLE_CONFIGS[s.configKey];
+  const gamingAmt = chargeFor(s.billableMinutes, cfg.rates[s.players][0], cfg.rates[s.players][1]);
+
+  function billHtml(){
+    const foodAmt = s.items.reduce((sum,it)=>sum+it.price*it.qty,0);
+    const accAmt = form.parentChild ? 0 : chargeFor(s.billableMinutes, settings.accompanyHourRate, settings.accompanyHalfRate) * (Number(form.accompany)||0);
+    const subtotal = gamingAmt + accAmt + foodAmt;
+    const discount = Number(form.discount)||0;
+    const tax = settings.taxEnabled ? (subtotal-discount)*settings.taxRate/100 : 0;
+    const grand = subtotal - discount + tax;
+    return { html: `<table>
+        <tr><td>Gaming (${cfg.console}, ${fmtDur(s.billableMinutes)})</td><td class="right">${fmt(gamingAmt)}</td></tr>
+        ${s.items.map(i=>`<tr><td>${i.name} x${i.qty}${i.beverages?` <span class="muted">(${i.beverages.join(' + ')})</span>`:''}</td><td class="right">${fmt(i.price*i.qty)}</td></tr>`).join('')}
+        ${Number(form.accompany)>0?`<tr><td>Accompanying (${form.accompany})</td><td class="right">${fmt(accAmt)}</td></tr>`:''}
+        <tr><td>Subtotal</td><td class="right">${fmt(subtotal)}</td></tr>
+        <tr><td>Discount</td><td class="right">-${fmt(discount)}</td></tr>
+        ${settings.taxEnabled?`<tr><td>Tax (${settings.taxRate}%)</td><td class="right">${fmt(tax)}</td></tr>`:''}
+        <tr class="total-row"><td>GRAND TOTAL</td><td class="right">${fmt(grand)}</td></tr>
+      </table>`, grand };
+  }
+  function refreshSummary(){
+    const el = document.getElementById('billSummary');
+    if(el) el.innerHTML = billHtml().html;
+    updateCompleteBtn();
+  }
+  function updateCompleteBtn(){
+    const btn = document.getElementById('completeBtn');
+    if(!btn) return;
+    const ok = form.name.trim().length>0 && form.mobile.trim().length===10;
+    btn.disabled = !ok; btn.style.opacity = ok?'1':'.4';
+  }
+  async function refreshCustBadge(){
+    const badge = document.getElementById('custBadge');
+    if(!badge) return;
+    if(form.mobile.length===10){
+      const existingCust = await dbGet('customers', form.mobile);
+      badge.innerHTML = existingCust ? `<div class="pill green" style="margin-top:6px">Existing Customer ✓ — ${existingCust.visits} visits, ${fmt(existingCust.totalSpend)} lifetime</div>` : `<div class="pill neon" style="margin-top:6px">New Customer</div>`;
+    } else { badge.innerHTML = ''; }
+  }
+
+  openModal(`
+    <button class="close" onclick="closeModal()">✕</button>
+    <h3>Checkout — ${cfg.console} ${s.players}P</h3>
+    <label>Customer Name</label><input id="ckName" placeholder="Customer name" oninput="window.__ckOnName(this.value)">
+    <label>Mobile Number (+91)</label><input id="ckMobile" maxlength="10" inputmode="numeric" placeholder="10-digit mobile" oninput="window.__ckOnMobile(this.value)">
+    <div id="custBadge"></div>
+    <label>Accompanying Persons</label><input id="ckAccompany" type="number" min="0" value="0" oninput="window.__ckOnAccompany(this.value)">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input type="checkbox" id="ckParent" style="width:auto" onchange="window.__ckOnParent(this.checked)"> Parent accompanying child? (free)</label>
+    <label>Discount (₹)</label><input id="ckDiscount" type="number" min="0" value="0" oninput="window.__ckOnDiscount(this.value)">
+    <div class="section-title">Bill Summary</div>
+    <div id="billSummary">${billHtml().html}</div>
+    <label>Payment Method</label>
+    <select id="ckPayMethod" onchange="window.__ckOnPay(this.value)">
+      <option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Other</option>
+    </select>
+    <button class="btn primary" id="completeBtn" style="margin-top:14px" onclick="completePayment(${sessionId})" disabled style="opacity:.4">COMPLETE PAYMENT</button>
+  `);
+
+  window.__ckOnName = (v)=>{ form.name=v; updateCompleteBtn(); };
+  window.__ckOnMobile = (v)=>{ form.mobile=v.replace(/\D/g,'').slice(0,10); const el=document.getElementById('ckMobile'); if(el && el.value!==form.mobile) el.value=form.mobile; updateCompleteBtn(); refreshCustBadge(); };
+  window.__ckOnAccompany = (v)=>{ form.accompany=v; refreshSummary(); };
+  window.__ckOnParent = (v)=>{ form.parentChild=v; refreshSummary(); };
+  window.__ckOnDiscount = (v)=>{ form.discount=v; refreshSummary(); };
+  window.__ckOnPay = (v)=>{ form.payMethod=v; };
+  window.__checkoutForm = ()=>form;
+  updateCompleteBtn();
+}
+async function completePayment(sessionId){
+  const form = window.__checkoutForm();
+  const s = await dbGet('sessions', sessionId);
+  const cfg = CONSOLE_CONFIGS[s.configKey];
+  const settings = state.settings;
+  const name = form.name.trim(), mobile = form.mobile.trim();
+  if(!name || mobile.length!==10){ alert('Enter valid name and 10-digit mobile number.'); return; }
+  const accompanyVal = Number(form.accompany)||0, discountVal = Number(form.discount)||0, parentChild = !!form.parentChild, payMethod = form.payMethod;
+
+  const gamingAmt = chargeFor(s.billableMinutes, cfg.rates[s.players][0], cfg.rates[s.players][1]);
+  const foodAmt = s.items.reduce((sum,it)=>sum+it.price*it.qty,0);
+  const accAmt = parentChild ? 0 : chargeFor(s.billableMinutes, settings.accompanyHourRate, settings.accompanyHalfRate) * accompanyVal;
+  const subtotal = gamingAmt + accAmt + foodAmt;
+  const tax = settings.taxEnabled ? (subtotal-discountVal)*settings.taxRate/100 : 0;
+  const grand = subtotal - discountVal + tax;
+
+  let cust = await dbGet('customers', mobile);
+  const nowIso = new Date().toISOString();
+  if(!cust){ cust = { mobile, name, email:'', address:'', joined:nowIso, visits:0, gamingSessions:0, gamingHours:0, gamingSpend:0, foodSpend:0, totalSpend:0, lastVisit:nowIso, invoiceIds:[] }; }
+  cust.name = name; cust.visits += 1; cust.gamingSessions += 1; cust.gamingHours += s.billableMinutes/60;
+  cust.gamingSpend += gamingAmt + accAmt; cust.foodSpend += foodAmt; cust.totalSpend += grand; cust.lastVisit = nowIso;
+
+  for(const item of s.items){ if(item.productId){ const p = await dbGet('products', item.productId); if(p && p.combo===undefined){ p.stock = Math.max(0, p.stock - item.qty); await dbPut('products', p); } } }
+
+  const invNo = settings.invoicePrefix + String(settings.nextInvoiceNo).padStart(6,'0');
+  settings.nextInvoiceNo += 1; await dbPut('settings', settings); state.settings = settings;
+
+  const invoice = { number: invNo, date: Date.now(), customerName:name, customerMobile:mobile,
+    console:cfg.console, tv:cfg.tv, players:s.players, durationMins:s.billableMinutes,
+    gamingAmount: gamingAmt, accompanyAmount: accAmt, accompanyCount: accompanyVal,
+    foodAmount: foodAmt, items: s.items, subtotal, discount: discountVal, tax, grandTotal: grand, paymentMethod: payMethod };
+  const invId = await dbPut('invoices', invoice);
+  cust.invoiceIds.push(invId); await dbPut('customers', cust);
+
+  s.status='completed'; s.endTime=Date.now(); await dbPut('sessions', s);
+  await creditAccount(payMethod, grand);
+  await updateDailyRecord(dateKey(invoice.date));
+
+  closeModal();
+  showInvoiceSuccess({...invoice, id:invId});
+}
+async function creditAccount(payMethod, amount){
+  const accName = PAY_TO_ACCOUNT[payMethod] || 'Other';
+  const acc = await dbGet('accounts', accName) || {name:accName, balance:0};
+  acc.balance += amount; await dbPut('accounts', acc);
+}
+async function debitAccount(payMethod, amount){
+  const accName = PAY_TO_ACCOUNT[payMethod] || 'Other';
+  const acc = await dbGet('accounts', accName) || {name:accName, balance:0};
+  acc.balance -= amount; await dbPut('accounts', acc);
+}
+function waMessage(inv){
+  const lines = [ `🎮 ${state.settings.businessName}`, '', `Hi ${inv.customerName}!`, '', `Thank you for gaming with us 🎮`, '',
+    `Invoice: ${inv.number}`, `Date: ${new Date(inv.date).toLocaleString('en-IN')}`, '',
+    `🎮 GAMING`, `${inv.console} • ${inv.players} Player(s)`, `${fmtDur(inv.durationMins)}`, `${fmt(inv.gamingAmount)}`, '' ];
+  if(inv.items.length){ lines.push('🍟 FOOD & BEVERAGES'); inv.items.forEach(i=>lines.push(`${i.name} x ${i.qty} — ${fmt(i.price*i.qty)}`)); lines.push(''); }
+  if(inv.accompanyCount>0) lines.push(`Accompanying (${inv.accompanyCount}) — ${fmt(inv.accompanyAmount)}`,'');
+  lines.push(`Subtotal: ${fmt(inv.subtotal)}`, `Discount: ${fmt(inv.discount)}`, `Tax: ${fmt(inv.tax)}`, `TOTAL: ${fmt(inv.grandTotal)}`, '', `Payment: ${inv.paymentMethod}`, '', state.settings.footer);
+  return lines.join('\n');
+}
+function showInvoiceSuccess(inv){
+  const msg = waMessage(inv);
+  openModal(`
+    <button class="close" onclick="closeModal()">✕</button>
+    <h3 style="color:var(--green)">PAYMENT SUCCESSFUL ✓</h3>
+    <p class="muted">Invoice ${inv.number} created. Opening WhatsApp with the bill…</p>
+    <label>WhatsApp Message (editable)</label>
+    <textarea id="waMsg" rows="10">${msg}</textarea>
+    <button class="btn green" style="margin-top:10px" onclick="sendWhatsApp('${inv.customerMobile}')">📱 SEND BILL ON WHATSAPP</button>
+    <button class="btn" style="margin-top:8px" onclick="printInvoice(${inv.id})">🖨️ Print / Save PDF</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="closeModal(); go('dashboard')">Done</button>
+  `);
+  // Auto-trigger WhatsApp click-to-chat right away; the button above remains as a reliable
+  // fallback in case the browser's popup blocker stops the automatic attempt.
+  try{ sendWhatsApp(inv.customerMobile); }catch(e){}
+}
+function sendWhatsApp(mobile){ const text = document.getElementById('waMsg').value; window.open(`https://wa.me/91${mobile}?text=${encodeURIComponent(text)}`, '_blank'); }
+async function printInvoice(id){
+  const inv = await dbGet('invoices', id); const s = state.settings;
+  const w = window.open('', '_blank');
+  w.document.write(`<html><head><title>${inv.number}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111}table{width:100%;border-collapse:collapse;margin-top:12px}td,th{padding:6px;border-bottom:1px solid #ddd;text-align:left}.right{text-align:right}.tot{font-weight:800;font-size:18px}</style></head><body>
+    <h1>${s.businessName}</h1><div>${s.address||''} ${s.phone||''}</div>
+    <h3>Invoice ${inv.number}</h3><div>Date: ${new Date(inv.date).toLocaleString('en-IN')}</div>
+    <div>Customer: ${inv.customerName} (${inv.customerMobile})</div>
+    <table><tr><td>${inv.console} • ${inv.players}P • ${fmtDur(inv.durationMins)}</td><td class="right">₹${inv.gamingAmount}</td></tr>
+      ${inv.items.map(i=>`<tr><td>${i.name} x${i.qty}</td><td class="right">₹${i.price*i.qty}</td></tr>`).join('')}
+      ${inv.accompanyAmount?`<tr><td>Accompanying (${inv.accompanyCount})</td><td class="right">₹${inv.accompanyAmount}</td></tr>`:''}
+      <tr><td>Subtotal</td><td class="right">₹${inv.subtotal}</td></tr><tr><td>Discount</td><td class="right">-₹${inv.discount}</td></tr>
+      <tr><td>Tax</td><td class="right">₹${Math.round(inv.tax)}</td></tr><tr class="tot"><td>GRAND TOTAL</td><td class="right">₹${Math.round(inv.grandTotal)}</td></tr></table>
+    <p>Payment: ${inv.paymentMethod}</p><p>${s.footer}</p><script>window.print()<\/script></body></html>`);
+  w.document.close();
+}
+
+/* ============ Inventory ============ */
+async function screenInventory(){
+  const products = await dbAll('products');
+  return `<h2>Inventory</h2>
+  <button class="btn" style="margin-bottom:10px" onclick="exportInv()">⬇️ Export CSV</button>
+  ` + products.map(p=>{
+    const status = p.combo!==undefined ? '' : (p.stock<=0?'<span class="pill red">Out of Stock</span>':p.stock<=p.min?'<span class="pill amber">Low Stock</span>':'<span class="pill green">In Stock</span>');
+    return `<div class="card"><div class="list-item">
+      <div><b>${p.name}</b><br><span class="muted">${p.cat} · ${fmt(p.price)}</span></div>
+      <div style="text-align:right">${status}${p.combo===undefined?`<br><span class="muted">Stock: ${p.stock}</span>`:''}</div>
+    </div>${p.combo===undefined?`<div class="row" style="margin-top:8px"><button class="btn sm" onclick="adjustStock(${p.id},-1)">- Stock</button><button class="btn sm" onclick="adjustStock(${p.id},1)">+ Stock</button></div>`:''}</div>`;
+  }).join('');
+}
+async function exportInv(){ downloadCSV('LVL-inventory.csv', await dbAll('products')); }
+async function exportInvoicesCSV(){ downloadCSV('LVL-invoices.csv', await dbAll('invoices')); }
+async function exportCustomersCSV(){ downloadCSV('LVL-customers.csv', await dbAll('customers')); }
+async function exportExpensesCSV(){ downloadCSV('LVL-expenses.csv', await dbAll('expenses')); }
+async function exportPurchasesCSV(){ downloadCSV('LVL-purchases.csv', await dbAll('purchases')); }
+async function adjustStock(id, delta){ const p = await dbGet('products', id); p.stock = Math.max(0, p.stock+delta); await dbPut('products', p); render(); }
+
+/* ============ Invoices ============ */
+async function screenInvoices(){
+  const invoices = (await dbAll('invoices')).sort((a,b)=>b.date-a.date);
+  let html = `<h2>Invoices</h2><button class="btn" style="margin-bottom:10px" onclick="exportInvoicesCSV()">⬇️ Export CSV</button>`;
+  if(!invoices.length) return html + `<div class="empty">No invoices yet.</div>`;
+  return html + invoices.map(i=>`<div class="card"><div class="list-item"><div><b>${i.number}</b><br><span class="muted">${i.customerName} · ${new Date(i.date).toLocaleDateString('en-IN')}</span></div>
+      <div style="text-align:right">${fmt(i.grandTotal)}<br><button class="btn sm" style="margin-top:4px" onclick="printInvoice(${i.id})">Print</button></div></div></div>`).join('');
+}
+
+/* ============ Customers ============ */
+let __custCache = [];
+async function screenCustomers(){
+  __custCache = (await dbAll('customers')).sort((a,b)=>b.totalSpend-a.totalSpend);
+  return `<h2>Customers</h2>
+  <input id="custSearch" placeholder="🔍 Search by name or phone number" oninput="filterCustomers(this.value)" style="margin-bottom:10px">
+  <button class="btn" style="margin-bottom:10px" onclick="exportCustomersCSV()">⬇️ Export CSV</button>
+  <div id="custList">${custListHtml(__custCache)}</div>`;
+}
+function custListHtml(list){
+  if(!list.length) return `<div class="empty">No customers found.</div>`;
+  return list.map(c=>`<div class="card" onclick="openCustomer('${c.mobile}')"><div class="list-item"><div><b>${c.name}</b><br><span class="muted">${c.mobile} · ${c.visits} visits</span></div><div class="right">${fmt(c.totalSpend)}</div></div></div>`).join('');
+}
+function filterCustomers(q){
+  q = q.trim().toLowerCase();
+  const filtered = !q ? __custCache : __custCache.filter(c=>c.name.toLowerCase().includes(q) || c.mobile.includes(q));
+  const el = document.getElementById('custList');
+  if(el) el.innerHTML = custListHtml(filtered);
+}
+function openCustomer(mobile){ state.custProfile = mobile; state.screen='customerProfile'; render(); }
+async function screenCustomerProfile(){
+  const c = await dbGet('customers', state.custProfile);
+  if(!c) return `<div class="empty">Customer not found.</div>`;
+  const invoices = []; for(const id of c.invoiceIds){ const inv = await dbGet('invoices', id); if(inv) invoices.push(inv); }
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('customers')">← Back</button>
+  <h2>${c.name}</h2>
+  <div class="card"><div class="grid2">
+      <div class="stat"><div class="v">${c.visits}</div><div class="l">Visits</div></div>
+      <div class="stat"><div class="v">${c.gamingHours.toFixed(1)}h</div><div class="l">Gaming Hours</div></div>
+      <div class="stat"><div class="v">${fmt(c.gamingSpend)}</div><div class="l">Gaming Spend</div></div>
+      <div class="stat"><div class="v">${fmt(c.foodSpend)}</div><div class="l">Food Spend</div></div>
+      <div class="stat"><div class="v">${fmt(c.totalSpend)}</div><div class="l">Total Spend</div></div>
+      <div class="stat"><div class="v">${new Date(c.lastVisit).toLocaleDateString('en-IN')}</div><div class="l">Last Visit</div></div>
+  </div></div>
+  <div class="section-title">Invoice History</div>
+  ${invoices.map(i=>`<div class="list-item"><span>${i.number}</span><span>${fmt(i.grandTotal)}</span></div>`).join('') || '<div class="muted">No invoices.</div>'}`;
+}
+
+/* ============ Expenses (with recurring + payment method) ============ */
+async function screenExpenses(){
+  const all = await dbAll('expenses');
+  const templates = all.filter(e=>e.isTemplate);
+  const logged = all.filter(e=>!e.isTemplate).sort((a,b)=>b.date-a.date);
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  <h2>Expenses</h2>
+  <div class="card">
+    <label>Category</label>
+    <select id="expCat"><option>Electricity</option><option>Internet</option><option>Rent</option><option>Staff</option><option>Maintenance</option><option>Equipment</option><option>Marketing</option><option>Cleaning</option><option>Food supplies</option><option>Transport</option><option>Software</option><option>Other</option></select>
+    <label>Description</label><input id="expDesc" placeholder="e.g. Monthly rent">
+    <label>Amount (₹)</label><input id="expAmt" type="number">
+    <label>Payment Method</label><select id="expPay"><option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Other</option></select>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input type="checkbox" id="expRecurring" style="width:auto" onchange="document.getElementById('freqWrap').style.display=this.checked?'block':'none'"> Recurring expense</label>
+    <div id="freqWrap" style="display:none"><label>Frequency</label><select id="expFreq"><option>Monthly</option><option>Weekly</option></select></div>
+    <button class="btn primary" style="margin-top:10px" onclick="addExpense()">Add Expense</button>
+  </div>
+  ${templates.length? `<div class="section-title">Recurring Templates</div>` + templates.map(t=>`<div class="list-item"><span>${t.category} · ${t.frequency}<br><span class="muted">Next due: ${new Date(t.nextDue).toLocaleDateString('en-IN')}</span></span><span>${fmt(t.amount)}</span></div>`).join('') : ''}
+  <div class="section-title">Recorded Expenses</div>
+  <button class="btn" style="margin-bottom:10px" onclick="exportExpensesCSV()">⬇️ Export CSV</button>
+  ${logged.length? logged.map(e=>`<div class="list-item"><span>${e.category}<br><span class="muted">${e.desc||''} · ${new Date(e.date).toLocaleDateString('en-IN')}</span></span><span>${fmt(e.amount)}</span></div>`).join('') : '<div class="empty">No expenses recorded.</div>'}
+  `;
+}
+async function addExpense(){
+  const category = document.getElementById('expCat').value;
+  const desc = document.getElementById('expDesc').value;
+  const amount = Number(document.getElementById('expAmt').value);
+  const payMethod = document.getElementById('expPay').value;
+  const recurring = document.getElementById('expRecurring').checked;
+  if(!amount) return alert('Enter a valid amount.');
+  if(recurring){
+    const freq = document.getElementById('expFreq').value;
+    const next = new Date(); if(freq==='Monthly') next.setMonth(next.getMonth()+1); else next.setDate(next.getDate()+7);
+    await dbPut('expenses', { category, desc, amount, frequency:freq, isTemplate:true, nextDue: next.getTime(), date: Date.now() });
+  } else {
+    await dbPut('expenses', { category, desc, amount, date:Date.now(), payMethod });
+    await debitAccount(payMethod, amount);
+    await updateDailyRecord(dateKey(Date.now()));
+  }
+  render();
+}
+async function logRecurring(templateId){
+  const t = await dbGet('expenses', templateId);
+  await dbPut('expenses', { category:t.category, desc:t.desc+' (recurring)', amount:t.amount, date:Date.now(), payMethod:'Cash' });
+  await debitAccount('Cash', t.amount);
+  const next = new Date(t.nextDue); if(t.frequency==='Monthly') next.setMonth(next.getMonth()+1); else next.setDate(next.getDate()+7);
+  t.nextDue = next.getTime(); await dbPut('expenses', t);
+  await updateDailyRecord(dateKey(Date.now()));
+  render();
+}
+
+/* ============ Vendors ============ */
+async function screenVendors(){
+  const vendors = await dbAll('vendors');
+  const purchases = await dbAll('purchases');
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  <h2>Vendors</h2>
+  <div class="card">
+    <label>Vendor Name</label><input id="vName" placeholder="Vendor name">
+    <label>Phone</label><input id="vPhone">
+    <label>Email</label><input id="vEmail">
+    <label>Address</label><input id="vAddr">
+    <label>GSTIN</label><input id="vGstin">
+    <button class="btn primary" style="margin-top:10px" onclick="addVendor()">Add Vendor</button>
+  </div>
+  ${vendors.length? vendors.map(v=>{
+    const vp = purchases.filter(p=>p.vendorId===v.id);
+    const total = vp.reduce((s,p)=>s+p.total,0);
+    const outstanding = vp.filter(p=>p.paymentStatus==='Unpaid').reduce((s,p)=>s+p.total,0);
+    return `<div class="card" onclick="openVendor(${v.id})"><div class="list-item"><div><b>${v.name}</b><br><span class="muted">${v.phone}</span></div>
+      <div class="right">${fmt(total)}<br>${outstanding>0?`<span class="pill red">Due ${fmt(outstanding)}</span>`:'<span class="pill green">Settled</span>'}</div></div></div>`;
+  }).join('') : '<div class="empty">No vendors yet.</div>'}`;
+}
+async function addVendor(){
+  const name = document.getElementById('vName').value.trim();
+  if(!name) return alert('Enter vendor name.');
+  await dbPut('vendors', { name, phone:document.getElementById('vPhone').value, email:document.getElementById('vEmail').value, address:document.getElementById('vAddr').value, gstin:document.getElementById('vGstin').value });
+  render();
+}
+function openVendor(id){ state.vendorId=id; state.screen='vendorProfile'; render(); }
+async function screenVendorProfile(){
+  const v = await dbGet('vendors', state.vendorId);
+  const purchases = (await dbAll('purchases')).filter(p=>p.vendorId===v.id);
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('vendors')">← Back</button>
+  <h2>${v.name}</h2><div class="card muted">${v.phone} · ${v.email}<br>${v.address}<br>${v.gstin?'GSTIN: '+v.gstin:''}</div>
+  <div class="section-title">Purchase History</div>
+  ${purchases.length? purchases.map(p=>`<div class="list-item"><span>${p.invoiceNo}<br><span class="muted">${new Date(p.date).toLocaleDateString('en-IN')}</span></span><span>${fmt(p.total)} <span class="pill ${p.paymentStatus==='Paid'?'green':'red'}">${p.paymentStatus}</span></span></div>`).join('') : '<div class="muted">No purchases.</div>'}`;
+}
+
+/* ============ Purchases ============ */
+let purchaseCart = [];
+async function screenPurchases(){
+  const purchases = (await dbAll('purchases')).sort((a,b)=>b.date-a.date);
+  const vendors = await dbAll('vendors');
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  <h2>Purchases</h2>
+  <div class="card">
+    <label>Vendor</label><select id="pVendor">${vendors.length?vendors.map(v=>`<option value="${v.id}">${v.name}</option>`).join(''):'<option value="">Add a vendor first</option>'}</select>
+    <label>Invoice Number</label><input id="pInvNo" placeholder="Vendor invoice #">
+    <button class="btn" style="margin-top:8px" onclick="addPurchaseLine()">+ Add Item Line</button>
+    <div id="pCartView">${renderPurchaseCart()}</div>
+    <label>Tax (%)</label><input id="pTax" type="number" value="0">
+    <label>Payment Status</label><select id="pStatus"><option>Unpaid</option><option>Paid</option></select>
+    <label>Payment Method (if paid)</label><select id="pPayMethod"><option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Other</option></select>
+    <button class="btn primary" style="margin-top:10px" onclick="savePurchase()">Save Purchase</button>
+  </div>
+  <button class="btn" style="margin-bottom:10px" onclick="exportPurchasesCSV()">⬇️ Export CSV</button>
+  ${purchases.length? purchases.map(p=>`<div class="list-item"><span>${p.invoiceNo}<br><span class="muted">${new Date(p.date).toLocaleDateString('en-IN')}</span></span><span>${fmt(p.total)}</span></div>`).join('') : '<div class="empty">No purchases yet.</div>'}`;
+}
+function renderPurchaseCart(){
+  if(!purchaseCart.length) return '<div class="muted" style="margin:8px 0">No items added yet.</div>';
+  return purchaseCart.map((it,idx)=>`<div class="list-item"><span>${it.name} x${it.qty} @ ${fmt(it.rate)}</span><span>${fmt(it.qty*it.rate)} <button class="btn sm" onclick="removePurchaseLine(${idx})">✕</button></span></div>`).join('');
+}
+async function addPurchaseLine(){
+  const products = await dbAll('products');
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Add Purchase Item</h3>
+    <label>Product</label><select id="lineProd">${products.filter(p=>p.combo===undefined).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select>
+    <label>Quantity</label><input id="lineQty" type="number" value="1">
+    <label>Rate (₹)</label><input id="lineRate" type="number" value="0">
+    <button class="btn primary" style="margin-top:10px" onclick="confirmPurchaseLine()">Add</button>`);
+}
+async function confirmPurchaseLine(){
+  const pid = Number(document.getElementById('lineProd').value);
+  const p = await dbGet('products', pid);
+  const qty = Number(document.getElementById('lineQty').value)||1;
+  const rate = Number(document.getElementById('lineRate').value)||0;
+  purchaseCart.push({productId:pid, name:p.name, qty, rate});
+  closeModal(); render();
+}
+function removePurchaseLine(idx){ purchaseCart.splice(idx,1); render(); }
+async function savePurchase(){
+  if(!purchaseCart.length) return alert('Add at least one item.');
+  const vendorId = Number(document.getElementById('pVendor').value);
+  const invoiceNo = document.getElementById('pInvNo').value || ('PUR-'+Date.now());
+  const tax = Number(document.getElementById('pTax').value)||0;
+  const paymentStatus = document.getElementById('pStatus').value;
+  const payMethod = document.getElementById('pPayMethod').value;
+  const subtotal = purchaseCart.reduce((s,i)=>s+i.qty*i.rate,0);
+  const total = subtotal + subtotal*tax/100;
+  for(const item of purchaseCart){ const p = await dbGet('products', item.productId); p.stock += item.qty; await dbPut('products', p); }
+  await dbPut('purchases', { vendorId, invoiceNo, date:Date.now(), items:purchaseCart, subtotal, tax, total, paymentStatus });
+  if(paymentStatus==='Paid') await debitAccount(payMethod, total);
+  purchaseCart = [];
+  render();
+}
+
+/* ============ Employees ============ */
+async function screenEmployees(){
+  const emps = await dbAll('employees');
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  <h2>Employees</h2>
+  <div class="card">
+    <label>Name</label><input id="eName"><label>Phone</label><input id="ePhone">
+    <label>Role</label><input id="eRole"><label>Joining Date</label><input id="eJoin" type="date">
+    <label>Salary (₹/month)</label><input id="eSalary" type="number">
+    <label>Status</label><select id="eStatus"><option>Active</option><option>Inactive</option></select>
+    <button class="btn primary" style="margin-top:10px" onclick="addEmployee()">Add Employee</button>
+  </div>
+  ${emps.length? emps.map(e=>`<div class="card" onclick="openEmployee(${e.id})"><div class="list-item"><div><b>${e.name}</b><br><span class="muted">${e.role}</span></div><div class="right">${fmt(e.salary)}/mo <span class="pill ${e.status==='Active'?'green':'red'}">${e.status}</span></div></div></div>`).join('') : '<div class="empty">No employees yet.</div>'}`;
+}
+async function addEmployee(){
+  const name = document.getElementById('eName').value.trim();
+  if(!name) return alert('Enter employee name.');
+  await dbPut('employees', { name, phone:document.getElementById('ePhone').value, role:document.getElementById('eRole').value, joining:document.getElementById('eJoin').value, salary:Number(document.getElementById('eSalary').value)||0, status:document.getElementById('eStatus').value });
+  render();
+}
+function openEmployee(id){ state.empId=id; state.screen='employeeProfile'; render(); }
+async function screenEmployeeProfile(){
+  const e = await dbGet('employees', state.empId);
+  const txs = (await dbAll('employeeTx')).filter(t=>t.employeeId===e.id).sort((a,b)=>b.date-a.date);
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('employees')">← Back</button>
+  <h2>${e.name}</h2><div class="card muted">${e.role} · ${e.phone}<br>Salary: ${fmt(e.salary)}/mo</div>
+  <div class="card">
+    <label>Type</label><select id="txType"><option>Salary Payment</option><option>Advance</option></select>
+    <label>Amount (₹)</label><input id="txAmt" type="number">
+    <label>Notes</label><input id="txNotes">
+    <button class="btn primary" style="margin-top:10px" onclick="addEmpTx(${e.id})">Add Transaction</button>
+  </div>
+  <div class="section-title">History</div>
+  ${txs.length? txs.map(t=>`<div class="list-item"><span>${t.type}<br><span class="muted">${new Date(t.date).toLocaleDateString('en-IN')} ${t.notes||''}</span></span><span>${fmt(t.amount)}</span></div>`).join('') : '<div class="muted">No transactions.</div>'}`;
+}
+async function addEmpTx(employeeId){
+  const type = document.getElementById('txType').value;
+  const amount = Number(document.getElementById('txAmt').value);
+  if(!amount) return alert('Enter a valid amount.');
+  await dbPut('employeeTx', { employeeId, type, amount, notes:document.getElementById('txNotes').value, date:Date.now() });
+  await debitAccount('Cash', amount);
+  render();
+}
+
+/* ============ Cash & Bank ============ */
+async function screenCashBank(){
+  const accounts = await dbAll('accounts');
+  const total = accounts.reduce((s,a)=>s+a.balance,0);
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  <h2>Cash & Bank</h2>
+  <div class="card"><div class="stat"><div class="v">${fmt(total)}</div><div class="l">Total Balance</div></div></div>
+  ${accounts.map(a=>`<div class="card"><div class="list-item"><span>${a.name}</span><span style="font-weight:700">${fmt(a.balance)}</span></div></div>`).join('')}
+  <p class="muted" style="font-size:12px">Balances update automatically from sales, expenses, and paid purchases based on the payment method selected.</p>`;
+}
+
+/* ============ Reports ============ */
+async function screenReports(){
+  const range = state.reportRange;
+  const invoicesAll = await dbAll('invoices');
+  const expensesAll = (await dbAll('expenses')).filter(e=>!e.isTemplate);
+  const invoices = invoicesAll.filter(i=>inRange(i.date, range, state.reportStart, state.reportEnd));
+  const expenses = expensesAll.filter(e=>inRange(e.date, range, state.reportStart, state.reportEnd));
+  const salesTotal = invoices.reduce((s,i)=>s+i.grandTotal,0);
+  const expTotal = expenses.reduce((s,e)=>s+e.amount,0);
+  const gamingRev = invoices.reduce((s,i)=>s+i.gamingAmount+i.accompanyAmount,0);
+  const foodRev = invoices.reduce((s,i)=>s+i.foodAmount,0);
+  const netProfit = salesTotal - expTotal;
+
+  const expByCat = {}; expenses.forEach(e=>{ expByCat[e.category]=(expByCat[e.category]||0)+e.amount; });
+  const consoleRev = {}; invoices.forEach(i=>{ consoleRev[i.console]=(consoleRev[i.console]||0)+i.gamingAmount; });
+  const playerRev = {}; invoices.forEach(i=>{ playerRev[i.players+'P']=(playerRev[i.players+'P']||0)+i.gamingAmount; });
+  const gamingHours = invoices.reduce((s,i)=>s+i.durationMins,0)/60;
+
+  const foodQty = {}; invoices.forEach(i=>i.items.forEach(it=>{ foodQty[it.name]=(foodQty[it.name]||0)+it.qty; }));
+  const bestSellers = Object.entries(foodQty).sort((a,b)=>b[1]-a[1]).slice(0,6);
+
+  const products = await dbAll('products');
+  const invValue = products.filter(p=>p.combo===undefined).reduce((s,p)=>s+p.stock*p.price,0);
+  const lowStock = products.filter(p=>p.combo===undefined && p.stock<=p.min);
+
+  const bar = (obj, total)=>Object.entries(obj).map(([k,v])=>`<div class="bar-row"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${k}</span><span>${fmt(v)}</span></div><div class="bar-track"><div class="bar-fill" style="width:${total?Math.round(v/total*100):0}%"></div></div></div>`).join('');
+
+  const dailyRecords = (await dbAll('dailyRecords')).sort((a,b)=>b.date.localeCompare(a.date));
+  const monthly = aggregateDaily(dailyRecords, r=>monthKey(r.date), 12);
+  const weekly = aggregateDaily(dailyRecords, r=>weekKey(r.date), 12);
+  const periodBars = (periods)=>{
+    if(!periods.length) return '<div class="muted">Not enough history yet — this fills in as you record sales and expenses each day.</div>';
+    const max = Math.max(1, ...periods.map(p=>Math.max(p.sales,p.expenses)));
+    return periods.map(p=>`<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px"><b>${p.key}</b><span>Income ${fmt(p.sales)} · Expense ${fmt(p.expenses)}</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(p.sales/max*100)}%;background:linear-gradient(90deg,var(--green),#1c8f52)"></div></div>
+      <div class="bar-track" style="margin-top:3px"><div class="bar-fill" style="width:${Math.round(p.expenses/max*100)}%;background:linear-gradient(90deg,var(--red),#a33)"></div></div>
+    </div>`).join('');
+  };
+  const revenueBars = (periods)=>{
+    if(!periods.length) return '<div class="muted">No revenue history yet.</div>';
+    const max = Math.max(1, ...periods.map(p=>p.sales));
+    return periods.map(p=>`<div class="bar-row"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${p.key}</span><span>${fmt(p.sales)}</span></div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(p.sales/max*100)}%"></div></div></div>`).join('');
+  };
+
+  return `<h2>Reports</h2>
+  <div style="margin-bottom:10px">
+    ${['today','week','month','custom'].map(r=>`<span class="chip ${range===r?'sel':''}" onclick="setReportRange('${r}')">${r[0].toUpperCase()+r.slice(1)}</span>`).join('')}
+  </div>
+  ${range==='custom'?`<div class="card"><label>Start</label><input type="date" id="rStart" onchange="setCustomRange()"><label>End</label><input type="date" id="rEnd" onchange="setCustomRange()"></div>`:''}
+
+  <div class="section-title">Sales Report</div>
+  <div class="grid2">
+    <div class="stat"><div class="v">${fmt(salesTotal)}</div><div class="l">Total Sales</div></div>
+    <div class="stat"><div class="v">${invoices.length}</div><div class="l">Invoices</div></div>
+  </div>
+
+  <div class="section-title">Profit & Loss</div>
+  <div class="card"><table>
+    <tr><td>Revenue</td><td class="right">${fmt(salesTotal)}</td></tr>
+    <tr><td>Expenses</td><td class="right">-${fmt(expTotal)}</td></tr>
+    <tr class="total-row"><td>Net Profit</td><td class="right">${fmt(netProfit)}</td></tr>
+  </table></div>
+
+  <div class="section-title">Monthly Income vs Expense</div>
+  <div class="card">${periodBars(monthly)}</div>
+
+  <div class="section-title">Weekly Revenue</div>
+  <div class="card">${revenueBars(weekly)}</div>
+
+  <div class="section-title">Monthly Revenue</div>
+  <div class="card">${revenueBars(monthly)}</div>
+
+  <div class="section-title">Expense Report</div>
+  <div class="card">${Object.keys(expByCat).length?bar(expByCat, expTotal):'<div class="muted">No expenses in this range.</div>'}</div>
+
+  <div class="section-title">Gaming Report</div>
+  <div class="card">
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="stat"><div class="v">${invoices.length}</div><div class="l">Sessions Billed</div></div>
+      <div class="stat"><div class="v">${gamingHours.toFixed(1)}h</div><div class="l">Gaming Hours</div></div>
+      <div class="stat"><div class="v">${fmt(gamingRev)}</div><div class="l">Gaming Revenue</div></div>
+      <div class="stat"><div class="v">${fmt(foodRev)}</div><div class="l">Food Revenue</div></div>
+    </div>
+    <div class="muted" style="font-size:12px;margin-bottom:4px">Revenue by Console</div>${bar(consoleRev, gamingRev)}
+    <div class="muted" style="font-size:12px;margin:10px 0 4px">Revenue by Player Count</div>${bar(playerRev, gamingRev)}
+  </div>
+
+  <div class="section-title">Food Report — Best Sellers</div>
+  <div class="card">${bestSellers.length? bestSellers.map(([n,q])=>`<div class="list-item"><span>${n}</span><span>${q} sold</span></div>`).join('') : '<div class="muted">No food sales in this range.</div>'}</div>
+
+  <div class="section-title">Inventory Report</div>
+  <div class="card"><div class="list-item"><span>Inventory Value</span><span>${fmt(invValue)}</span></div>
+  <div class="list-item"><span>Low Stock Items</span><span>${lowStock.length}</span></div></div>
+
+  <div class="section-title">Daily Backup Log</div>
+  <div class="card">${dailyRecords.length ? dailyRecords.slice(0,60).map(r=>`
+    <div class="list-item"><div><b>${r.date}</b><br><span class="muted">${r.invoiceCount} invoice(s) · ${r.expenseCount||0} expense(s)</span></div>
+    <div class="right">${fmt(r.sales)} / -${fmt(r.expenses)}<br><button class="btn sm" style="margin-top:4px" onclick="exportDayDetail('${r.date}')">Export Day</button></div></div>
+  `).join('') : '<div class="muted">No daily records yet — these build up automatically as you take payments.</div>'}</div>
+
+  <button class="btn primary" style="margin:12px 0" onclick="exportAllCSV()">⬇️ Export All Data (CSV)</button>
+  `;
+}
+function setReportRange(r){ state.reportRange=r; render(); }
+function setCustomRange(){
+  const s = document.getElementById('rStart')?.value, e = document.getElementById('rEnd')?.value;
+  if(s) state.reportStart = new Date(s).getTime();
+  if(e) state.reportEnd = new Date(e).setHours(23,59,59,999);
+  render();
+}
+
+/* ============ More menu ============ */
+function screenMore(){
+  return `<h2>More</h2>
+  <div class="card">
+    <div class="list-item" onclick="go('customers')"><span>👤 Customers</span><span>›</span></div>
+    <div class="list-item" onclick="go('vendors')"><span>🏭 Vendors</span><span>›</span></div>
+    <div class="list-item" onclick="go('purchases')"><span>🛒 Purchases</span><span>›</span></div>
+    <div class="list-item" onclick="go('expenses')"><span>💸 Expenses</span><span>›</span></div>
+    <div class="list-item" onclick="go('employees')"><span>🧑‍💼 Employees</span><span>›</span></div>
+    <div class="list-item" onclick="go('cashbank')"><span>🏦 Cash & Bank</span><span>›</span></div>
+    <div class="list-item" onclick="go('reports')"><span>📊 Reports</span><span>›</span></div>
+    <div class="list-item" onclick="go('settings')"><span>⚙️ Settings</span><span>›</span></div>
+    <div class="list-item" onclick="go('backup')"><span>💾 Backup & Restore</span><span>›</span></div>
+  </div>
+  <button class="btn" onclick="loadDemoData()">🧪 Load Demo Data</button>
+  <button class="btn" style="margin-top:10px" onclick="triggerInstall()">📲 Install App on This Phone</button>
+  `;
+}
+
+/* ============ Settings ============ */
+function screenSettings(){
+  const s = state.settings;
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  <h2>Settings</h2>
+  <div class="card">
+    <div class="section-title">Business Info</div>
+    <label>Business Name</label><input id="setName" value="${s.businessName}">
+    <label>Phone</label><input id="setPhone" value="${s.phone}">
+    <label>Address</label><input id="setAddr" value="${s.address}">
+    <div class="section-title">Invoice</div>
+    <label>Invoice Prefix</label><input id="setPrefix" value="${s.invoicePrefix}">
+    <label>Next Invoice Number</label><input id="setNextNo" type="number" value="${s.nextInvoiceNo}">
+    <div class="section-title">Accompanying Person</div>
+    <label>Rate per hour (₹)</label><input id="setAccHr" type="number" value="${s.accompanyHourRate}">
+    <label>Rate per 30 min (₹)</label><input id="setAccHalf" type="number" value="${s.accompanyHalfRate}">
+    <div class="section-title">Tax</div>
+    <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" style="width:auto" id="setTaxOn" ${s.taxEnabled?'checked':''}> Enable Tax</label>
+    <label>Tax Rate (%)</label><input id="setTaxRate" type="number" value="${s.taxRate}">
+    <button class="btn primary" style="margin-top:12px" onclick="saveSettings()">Save Settings</button>
+  </div>`;
+}
+async function saveSettings(){
+  const s = state.settings;
+  s.businessName = document.getElementById('setName').value;
+  s.phone = document.getElementById('setPhone').value;
+  s.address = document.getElementById('setAddr').value;
+  s.invoicePrefix = document.getElementById('setPrefix').value;
+  s.nextInvoiceNo = Number(document.getElementById('setNextNo').value)||1;
+  s.accompanyHourRate = Number(document.getElementById('setAccHr').value)||0;
+  s.accompanyHalfRate = Number(document.getElementById('setAccHalf').value)||0;
+  s.taxEnabled = document.getElementById('setTaxOn').checked;
+  s.taxRate = Number(document.getElementById('setTaxRate').value)||0;
+  await dbPut('settings', s); alert('Settings saved.'); render();
+}
+
+/* ============ Backup & Restore ============ */
+function screenBackup(){
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  <h2>Backup & Restore</h2>
+  <div class="card">
+    <button class="btn primary" onclick="doBackup()">⬇️ Backup Data</button>
+    <p class="muted" style="font-size:12px;margin-top:6px">On Android/iPhone this opens your Share menu — pick Google Drive, Files, or email to save it off your phone. If sharing isn't available it downloads the file directly.</p>
+    <label style="margin-top:14px">Restore from File</label>
+    <input type="file" id="restoreFile" accept=".json">
+    <button class="btn" style="margin-top:8px" onclick="doRestore()">Restore Data</button>
+    <button class="btn" style="margin-top:14px;border-color:var(--red);color:var(--red)" onclick="doClearAll()">🗑️ Clear All Data</button>
+  </div>
+  <div class="card">
+    <div class="section-title">Keeping data for years</div>
+    <p class="muted" style="font-size:13px">This app stores everything on your phone's browser storage, and it requests "persistent" storage so Android/iOS is less likely to clear it automatically. Even so, no on-device storage is 100% permanent — back up weekly (or daily using the export below) and keep a copy in Google Drive or email so nothing is ever lost.</p>
+  </div>`;
+}
+async function doBackup(){
+  const data = {};
+  for(const store of ['customers','sessions','invoices','products','expenses','settings','vendors','purchases','employees','employeeTx','accounts','dailyRecords']){ data[store] = await dbAll(store); }
+  const json = JSON.stringify(data,null,2);
+  const d = new Date().toISOString().slice(0,10);
+  const filename = `LVL-Books-Backup-${d}.json`;
+  const blob = new Blob([json], {type:'application/json'});
+  try{
+    const file = new File([blob], filename, {type:'application/json'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:'LVL Books Backup', text:`LVL Books backup — ${d}`});
+      return;
+    }
+  }catch(e){ /* user cancelled share or share unsupported — fall back to direct download below */ }
+  const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+}
+async function doRestore(){
+  const file = document.getElementById('restoreFile').files[0];
+  if(!file) return alert('Choose a backup file first.');
+  if(!confirm('This will replace all current data. Continue?')) return;
+  const data = JSON.parse(await file.text());
+  for(const store of Object.keys(data)){ await dbClear(store); for(const row of data[store]){ await dbPut(store, row); } }
+  state.settings = await dbGet('settings','main');
+  await rebuildDailyRecords();
+  alert('Data restored.'); go('dashboard');
+}
+async function doClearAll(){
+  if(!confirm('This will permanently delete ALL data. Are you sure?')) return;
+  if(!confirm('Really sure? This cannot be undone.')) return;
+  for(const store of ['customers','sessions','invoices','expenses','vendors','purchases','employees','employeeTx','dailyRecords']){ await dbClear(store); }
+  await dbClear('products'); for(const p of DEFAULT_PRODUCTS){ await dbPut('products', p); }
+  await dbClear('accounts'); for(const a of DEFAULT_ACCOUNTS){ await dbPut('accounts', a); }
+  await dbClear('settings'); state.settings = {key:'main', ...DEFAULT_SETTINGS}; await dbPut('settings', state.settings);
+  go('dashboard');
+}
+
+/* ============ Demo Data ============ */
+async function loadDemoData(){
+  if(!confirm('Load sample customers, sessions, invoices, expenses, vendors & purchases for testing?')) return;
+  const names = ['Arun Kumar','Divya S','Rahul M','Priya R','Karthik V'];
+  for(let i=0;i<names.length;i++){
+    const mobile = '90000000'+(10+i);
+    await dbPut('customers', { mobile, name:names[i], email:'', address:'', joined:new Date().toISOString(), visits:2+i, gamingSessions:2+i, gamingHours:3+i, gamingSpend:500+i*100, foodSpend:150+i*30, totalSpend:650+i*130, lastVisit:new Date().toISOString(), invoiceIds:[] });
+  }
+  const cfgKeys = Object.keys(CONSOLE_CONFIGS);
+  for(let i=0;i<8;i++){
+    const cfg = CONSOLE_CONFIGS[cfgKeys[i%cfgKeys.length]];
+    const players = (i%4)+1;
+    const mins = [60,90,120,150][i%4];
+    const gaming = chargeFor(mins, cfg.rates[players][0], cfg.rates[players][1]);
+    const food = [95,135,40,0][i%4];
+    const total = gaming+food;
+    const settings = state.settings;
+    const invNo = settings.invoicePrefix + String(settings.nextInvoiceNo).padStart(6,'0');
+    settings.nextInvoiceNo += 1; await dbPut('settings', settings);
+    await dbPut('invoices', { number:invNo, date:Date.now()-i*3600000*5, customerName:names[i%names.length], customerMobile:'90000000'+(10+i%names.length),
+      console:cfg.console, tv:cfg.tv, players, durationMins:mins, gamingAmount:gaming, accompanyAmount:0, accompanyCount:0, foodAmount:food, items:[], subtotal:total, discount:0, tax:0, grandTotal:total, paymentMethod:'UPI' });
+    await creditAccount('UPI', total);
+  }
+  await dbPut('vendors', { name:'Chennai Snacks Wholesale', phone:'9876543210', email:'', address:'Chennai', gstin:'' });
+  const vendors = await dbAll('vendors'); const v = vendors[vendors.length-1];
+  await dbPut('purchases', { vendorId:v.id, invoiceNo:'PUR-DEMO-1', date:Date.now(), items:[{productId:1,name:'Classic Fries',qty:20,rate:60}], subtotal:1200, tax:0, total:1200, paymentStatus:'Unpaid' });
+  await dbPut('expenses', { category:'Electricity', desc:'Demo bill', amount:3500, date:Date.now(), payMethod:'Cash' });
+  await debitAccount('Cash', 3500);
+  await dbPut('employees', { name:'Suresh Babu', phone:'9998887771', role:'Staff', joining:'2025-01-01', salary:15000, status:'Active' });
+  state.settings = await dbGet('settings','main');
+  await rebuildDailyRecords();
+  alert('Demo data loaded!'); go('dashboard');
+}
+
+boot();
+</script>
+</body>
+</html>
