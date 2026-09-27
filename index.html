@@ -10,8 +10,51 @@
 <meta name="apple-mobile-web-app-title" content="LVL Books">
 <title>LVL Books</title>
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="icon" href="icons/favicon-64.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<script type="module">
+  // Firebase v9+ modular SDK. This only works when served over http(s)/localhost —
+  // see README.md for why it can't run inside the claude.ai chat preview.
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+  import { getAnalytics, isSupported as analyticsSupported } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
+  import {
+    initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+    collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, writeBatch
+  } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBINhbDllfxYzxHwANsNH63kM5F9XtFmEc",
+    authDomain: "lvl-books-2dbab.firebaseapp.com",
+    projectId: "lvl-books-2dbab",
+    storageBucket: "lvl-books-2dbab.firebasestorage.app",
+    messagingSenderId: "1082305344813",
+    appId: "1:1082305344813:web:5347393ae77453bd3d8fa4",
+    measurementId: "G-89CSDSTCX5"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  analyticsSupported().then(ok=>{ if(ok){ try{ getAnalytics(app); }catch(e){ console.warn('Analytics unavailable', e); } } });
+
+  // Offline persistence + multi-tab support, so the app keeps working with no signal and
+  // catches up automatically once back online.
+  const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+  const auth = getAuth(app);
+
+  window.__fb = { app, db, auth, collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, writeBatch };
+  window.__fbReady = false;
+
+  signInAnonymously(auth).catch(err=>console.error('Anonymous sign-in failed:', err));
+  onAuthStateChanged(auth, (user)=>{
+    if(user){
+      window.__fbReady = true;
+      window.dispatchEvent(new Event('fb-ready'));
+    }
+  });
+</script>
 <style>
 :root{
   --bg:#0b0d12; --panel:#12151c; --panel2:#171b24; --line:#232838;
@@ -98,45 +141,82 @@ td,th{padding:6px 4px;text-align:left;border-bottom:1px solid var(--line)}
 <div class="navbar" id="navbar"></div>
 
 <script>
-/* ============ IndexedDB ============ */
-let db;
-function openDB(){
-  return new Promise((res,rej)=>{
-    const r = indexedDB.open('lvlbooks', 3);
-    r.onupgradeneeded = e=>{
-      const d = e.target.result;
-      const ensure = (name, opts)=>{ if(!d.objectStoreNames.contains(name)) d.createObjectStore(name, opts); };
-      ensure('customers',{keyPath:'mobile'});
-      ensure('sessions',{keyPath:'id',autoIncrement:true});
-      ensure('invoices',{keyPath:'id',autoIncrement:true});
-      ensure('products',{keyPath:'id',autoIncrement:true});
-      ensure('expenses',{keyPath:'id',autoIncrement:true});
-      ensure('settings',{keyPath:'key'});
-      ensure('vendors',{keyPath:'id',autoIncrement:true});
-      ensure('purchases',{keyPath:'id',autoIncrement:true});
-      ensure('employees',{keyPath:'id',autoIncrement:true});
-      ensure('employeeTx',{keyPath:'id',autoIncrement:true});
-      ensure('accounts',{keyPath:'name'});
-      ensure('dailyRecords',{keyPath:'date'});
-    };
-    r.onsuccess = e=>{db=e.target.result; res(db)};
-    r.onerror = e=>rej(e);
+/* ============ Firestore-backed data layer ============ */
+/* Same async function signatures as the old IndexedDB version (dbAll/dbGet/dbPut/dbDel/dbClear),
+   so none of the app logic below needs to change. Real data lives in Cloud Firestore; window.__fb
+   is populated by the Firebase module script in <head>. */
+function fb(){ return window.__fb; }
+function waitForFirebase(){
+  return new Promise((resolve)=>{
+    if(window.__fbReady){ resolve(); return; }
+    window.addEventListener('fb-ready', ()=>resolve(), {once:true});
+    setTimeout(()=>resolve(), 10000); // fail-safe: don't hang forever if Firebase can't reach the network
   });
 }
-function tx(store,mode){ return db.transaction(store,mode).objectStore(store) }
-function dbAll(store){ return new Promise((res,rej)=>{ const rq=tx(store,'readonly').getAll(); rq.onsuccess=()=>res(rq.result); rq.onerror=rej }) }
-function dbGet(store,key){ return new Promise((res,rej)=>{ const rq=tx(store,'readonly').get(key); rq.onsuccess=()=>res(rq.result); rq.onerror=rej }) }
-function dbPut(store,val){ return new Promise((res,rej)=>{ const rq=tx(store,'readwrite').put(val); rq.onsuccess=()=>res(rq.result); rq.onerror=rej }) }
-function dbDel(store,key){ return new Promise((res,rej)=>{ const rq=tx(store,'readwrite').delete(key); rq.onsuccess=()=>res(rq.result); rq.onerror=rej }) }
-function dbClear(store){ return new Promise((res,rej)=>{ const rq=tx(store,'readwrite').clear(); rq.onsuccess=()=>res(); rq.onerror=rej }) }
+const KEYPATH = { customers:'mobile', sessions:'id', invoices:'id', products:'id', expenses:'id',
+  settings:'key', vendors:'id', purchases:'id', employees:'id', employeeTx:'id', accounts:'name', dailyRecords:'date' };
+const AUTOINC = new Set(['sessions','invoices','products','expenses','vendors','purchases','employees','employeeTx']);
+async function nextId(store){
+  const f = fb();
+  const ref = f.doc(f.db, 'counters', store);
+  const snap = await f.getDoc(ref);
+  const n = (snap.exists() ? (snap.data().n||0) : 0) + 1;
+  await f.setDoc(ref, { n });
+  return n;
+}
+async function dbAll(store){
+  const f = fb();
+  const snap = await f.getDocs(f.collection(f.db, store));
+  return snap.docs.map(d=>d.data());
+}
+async function dbGet(store, key){
+  const f = fb();
+  const snap = await f.getDoc(f.doc(f.db, store, String(key)));
+  return snap.exists() ? snap.data() : undefined;
+}
+async function dbPut(store, val){
+  const f = fb();
+  const kp = KEYPATH[store] || 'id';
+  if(AUTOINC.has(store) && (val[kp]===undefined || val[kp]===null)){
+    val[kp] = await nextId(store);
+  }
+  await f.setDoc(f.doc(f.db, store, String(val[kp])), val);
+  return val[kp];
+}
+async function dbDel(store, key){
+  const f = fb();
+  await f.deleteDoc(f.doc(f.db, store, String(key)));
+}
+async function dbClear(store){
+  const f = fb();
+  const snap = await f.getDocs(f.collection(f.db, store));
+  const docs = snap.docs;
+  for(let i=0; i<docs.length; i+=400){
+    const batch = f.writeBatch(f.db);
+    docs.slice(i, i+400).forEach(d=>batch.delete(d.ref));
+    await batch.commit();
+  }
+}
+/* Debounced re-render so multiple near-simultaneous Firestore change events (e.g. a staff
+   member on another phone completing a sale) don't trigger a render storm. */
+let __renderTimer = null;
+function scheduleRender(){ clearTimeout(__renderTimer); __renderTimer = setTimeout(()=>{ try{ render(); }catch(e){} }, 200); }
+function setupRealtimeSync(){
+  const f = fb();
+  const stores = ['sessions','invoices','products','customers','expenses','vendors','purchases','employees','employeeTx','accounts','dailyRecords','settings'];
+  stores.forEach(store=>{
+    f.onSnapshot(f.collection(f.db, store), ()=>scheduleRender(), err=>console.error('Real-time sync error on', store, err));
+  });
+}
 
 /* ============ Static catalog / pricing data layer ============ */
-const CONSOLE_CONFIGS = {
+const DEFAULT_CONSOLE_CONFIGS = {
   PS4_55:   { console:'PS4',     tv:'55" 4K TV',          rates:{1:[120,60], 2:[190,95],  3:[260,130], 4:[340,170]} },
   PS5_55:   { console:'PS5',     tv:'55" 4K Neo QLED TV', rates:{1:[140,70], 2:[230,115], 3:[320,160], 4:[420,210]} },
   PS5_65:   { console:'PS5',     tv:'65" 4K QLED TV',     rates:{1:[160,80], 2:[270,135], 3:[380,190], 4:[500,250]} },
   PS5PRO_65:{ console:'PS5 Pro', tv:'65" 4K QLED TV',     rates:{1:[180,90], 2:[310,155], 3:[440,220], 4:[580,290]} },
 };
+let CONSOLE_CONFIGS = JSON.parse(JSON.stringify(DEFAULT_CONSOLE_CONFIGS));
 const CONSOLE_OPTIONS = { PS4:['PS4_55'], PS5:['PS5_55','PS5_65'], 'PS5 Pro':['PS5PRO_65'] };
 const DEFAULT_PRODUCTS = [
  {name:'Classic Fries',cat:'Veg Bites',price:95,stock:50,min:10},
@@ -209,7 +289,12 @@ let state = { screen:'dashboard', settings:null, custProfile:null, vendorId:null
 
 async function boot(){
   initTheme();
-  await openDB();
+  document.getElementById('root').innerHTML = `<div class="card" style="margin-top:40px;text-align:center"><b>Connecting to LVL Books cloud…</b><p class="muted" style="font-size:12px">If this takes more than a few seconds, check your internet connection.</p></div>`;
+  await waitForFirebase();
+  if(!window.__fbReady){
+    document.getElementById('root').innerHTML = `<div class="card" style="border-color:var(--red);margin-top:40px"><b style="color:var(--red)">Couldn't connect to the cloud database.</b><p class="muted" style="font-size:13px">Check your internet connection and reload. If this keeps happening, double-check the Firebase config and Firestore security rules (see README.md).</p><button class="btn primary" style="margin-top:10px" onclick="location.reload()">Retry</button></div>`;
+    return;
+  }
   if(navigator.storage && navigator.storage.persist){ try{ const granted = await navigator.storage.persist(); console.log('Persistent storage:', granted); }catch(e){} }
   let s = await dbGet('settings','main');
   if(!s){ s = {key:'main', ...DEFAULT_SETTINGS}; await dbPut('settings', s); }
@@ -218,8 +303,12 @@ async function boot(){
   if(prods.length===0){ for(const p of DEFAULT_PRODUCTS){ await dbPut('products', p); } }
   const accs = await dbAll('accounts');
   if(accs.length===0){ for(const a of DEFAULT_ACCOUNTS){ await dbPut('accounts', a); } }
+  const rates = await dbGet('settings','consoleRates');
+  if(rates && rates.configs) CONSOLE_CONFIGS = rates.configs;
+  await maybeAutoBackup();
   setupManifestAndInstall();
   render();
+  setupRealtimeSync();
 }
 function initTheme(){
   let saved = null;
@@ -244,7 +333,7 @@ function weekKey(dateStr){
 }
 function aggregateDaily(records, keyFn, limit){
   const map = {};
-  records.forEach(r=>{ const k=keyFn(r.date); if(!map[k]) map[k]={key:k, sales:0, expenses:0}; map[k].sales+=r.sales; map[k].expenses+=r.expenses; });
+  records.forEach(r=>{ const k=keyFn(r); if(!map[k]) map[k]={key:k, sales:0, expenses:0}; map[k].sales+=r.sales; map[k].expenses+=r.expenses; });
   return Object.values(map).sort((a,b)=>a.key.localeCompare(b.key)).slice(-limit);
 }
 async function updateDailyRecord(dateStr){
@@ -270,10 +359,12 @@ async function exportDayDetail(dateStr){
   a.href = url; a.download = `LVL-Books-Day-${dateStr}.json`; a.click();
 }
 function setupManifestAndInstall(){
-  // manifest.json and icons are linked as real static files in <head> for this local/production build.
-  if('serviceWorker' in navigator){
-    navigator.serviceWorker.register('sw.js').catch(err=>console.warn('Service worker registration failed:', err));
-  }
+  const icon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='36' fill='%230b0d12'/%3E%3Ctext x='96' y='118' font-size='58' text-anchor='middle' fill='%234be8ff' font-family='Arial' font-weight='bold'%3ELVL%3C/text%3E%3C/svg%3E";
+  const manifest = { name:"LVL Books", short_name:"LVL Books", start_url:".", display:"standalone", background_color:"#0b0d12", theme_color:"#0b0d12", icons:[{src:icon,sizes:"192x192",type:"image/svg+xml"},{src:icon,sizes:"512x512",type:"image/svg+xml"}] };
+  const link = document.createElement('link'); link.rel='manifest';
+  link.href = 'data:application/manifest+json,'+encodeURIComponent(JSON.stringify(manifest));
+  document.head.appendChild(link);
+  const aicon = document.createElement('link'); aicon.rel='apple-touch-icon'; aicon.href=icon; document.head.appendChild(aicon);
   window.deferredInstallPrompt = null;
   window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); window.deferredInstallPrompt=e; const b=document.getElementById('installBtn'); if(b) b.style.display='inline-block'; });
 }
@@ -307,7 +398,16 @@ async function render(){
     vendors:screenVendors, vendorProfile:screenVendorProfile, purchases:screenPurchases, employees:screenEmployees, employeeProfile:screenEmployeeProfile,
     cashbank:screenCashBank, reports:screenReports };
   const fn = map[state.screen] || screenDashboard;
-  root.innerHTML += await fn();
+  try{
+    root.innerHTML += await fn();
+  }catch(err){
+    console.error('Render error on screen', state.screen, err);
+    root.innerHTML += `<div class="card" style="border-color:var(--red)">
+      <b style="color:var(--red)">Something went wrong loading this page.</b>
+      <p class="muted" style="font-size:12px;margin:8px 0">${(err && err.message) ? err.message : err}</p>
+      <button class="btn primary" onclick="go('dashboard')">Back to Dashboard</button>
+    </div>`;
+  }
   if(window.deferredInstallPrompt) document.getElementById('installBtn').style.display='inline-block';
 }
 
@@ -327,6 +427,11 @@ async function screenDashboard(){
   const recTemplates = (await dbAll('expenses')).filter(e=>e.isTemplate && e.nextDue<=Date.now());
 
   return `
+  ${state.showBackupReminder ? `<div class="card" style="border-color:var(--amber)">
+    <b>⏰ Time for your backup</b>
+    <p class="muted" style="font-size:12px;margin:6px 0">It's been 2+ weeks since your last backup (or you haven't made one yet). Your data lives safely in the cloud, but a local copy is good insurance.</p>
+    <div class="row" style="gap:8px"><button class="btn primary sm" onclick="go('backup')">Back Up Now</button><button class="btn sm" onclick="dismissBackupReminder()">Dismiss</button></div>
+  </div>` : ''}
   <div class="section-title">Today's Summary</div>
   <div class="grid2">
     <div class="stat"><div class="v">${fmt(salesTotal)}</div><div class="l">Sales</div></div>
@@ -364,7 +469,10 @@ function sessionCard(s){
   return `<div class="card glow" data-session-id="${s.id}">
     <div class="row" style="justify-content:space-between">
       <div><b>${cfg.console}</b> · ${cfg.tv}<br><span class="muted">${s.players} Player(s)</span></div>
-      <div class="pill neon">LIVE</div>
+      <div class="row" style="gap:6px">
+        <div class="pill neon">LIVE</div>
+        <button class="btn sm" style="width:auto;min-height:auto;padding:3px 8px;border-color:var(--red);color:var(--red)" onclick="deleteSession(${s.id})" title="Delete session">🗑️</button>
+      </div>
     </div>
     <div class="timer" id="timerText-${s.id}">Billed: ${fmtDur(s.billableMinutes)}</div>
     <div style="margin:8px 0;font-size:22px;font-weight:800">${fmt(gaming+foodTotal)}</div>
@@ -467,6 +575,13 @@ function startGamingFlow(){
   renderPicker();
 }
 async function extendSession(id, mins){ const s = await dbGet('sessions', id); s.billableMinutes += mins; await dbPut('sessions', s); render(); }
+async function deleteSession(id){
+  if(!confirm('Delete this session? This cannot be undone. Use this for mistaken starts or sessions you no longer want to bill.')) return;
+  document.getElementById('expiryBanner-'+id)?.remove();
+  delete expiredAlerted[id];
+  await dbDel('sessions', id);
+  render();
+}
 async function addFoodModal(sessionId){
   const products = await dbAll('products');
   const cats = [...new Set(products.map(p=>p.cat))];
@@ -540,7 +655,7 @@ function comboAdd(sessionId, prodId){
 }
 async function endSession(sessionId){
   const settings = state.settings;
-  const form = { name:'', mobile:'', accompany:0, parentChild:false, discount:0, payMethod:'Cash' };
+  const form = { name:'', mobile:'', accompany:0, parentChild:false, discountPercent:0, payMethod:'Cash', sendBill:true };
   const s = await dbGet('sessions', sessionId);
   const cfg = CONSOLE_CONFIGS[s.configKey];
   const gamingAmt = chargeFor(s.billableMinutes, cfg.rates[s.players][0], cfg.rates[s.players][1]);
@@ -549,15 +664,16 @@ async function endSession(sessionId){
     const foodAmt = s.items.reduce((sum,it)=>sum+it.price*it.qty,0);
     const accAmt = form.parentChild ? 0 : chargeFor(s.billableMinutes, settings.accompanyHourRate, settings.accompanyHalfRate) * (Number(form.accompany)||0);
     const subtotal = gamingAmt + accAmt + foodAmt;
-    const discount = Number(form.discount)||0;
-    const tax = settings.taxEnabled ? (subtotal-discount)*settings.taxRate/100 : 0;
-    const grand = subtotal - discount + tax;
+    const discountPct = Math.min(100, Math.max(0, Number(form.discountPercent)||0));
+    const discountAmt = subtotal * discountPct/100;
+    const tax = settings.taxEnabled ? (subtotal-discountAmt)*settings.taxRate/100 : 0;
+    const grand = subtotal - discountAmt + tax;
     return { html: `<table>
         <tr><td>Gaming (${cfg.console}, ${fmtDur(s.billableMinutes)})</td><td class="right">${fmt(gamingAmt)}</td></tr>
         ${s.items.map(i=>`<tr><td>${i.name} x${i.qty}${i.beverages?` <span class="muted">(${i.beverages.join(' + ')})</span>`:''}</td><td class="right">${fmt(i.price*i.qty)}</td></tr>`).join('')}
         ${Number(form.accompany)>0?`<tr><td>Accompanying (${form.accompany})</td><td class="right">${fmt(accAmt)}</td></tr>`:''}
         <tr><td>Subtotal</td><td class="right">${fmt(subtotal)}</td></tr>
-        <tr><td>Discount</td><td class="right">-${fmt(discount)}</td></tr>
+        <tr><td>Discount (${discountPct}%)</td><td class="right">-${fmt(discountAmt)}</td></tr>
         ${settings.taxEnabled?`<tr><td>Tax (${settings.taxRate}%)</td><td class="right">${fmt(tax)}</td></tr>`:''}
         <tr class="total-row"><td>GRAND TOTAL</td><td class="right">${fmt(grand)}</td></tr>
       </table>`, grand };
@@ -570,7 +686,8 @@ async function endSession(sessionId){
   function updateCompleteBtn(){
     const btn = document.getElementById('completeBtn');
     if(!btn) return;
-    const ok = form.name.trim().length>0 && form.mobile.trim().length===10;
+    // Customer name/mobile are only required when the digital bill will actually be sent to them.
+    const ok = !form.sendBill || (form.name.trim().length>0 && form.mobile.trim().length===10);
     btn.disabled = !ok; btn.style.opacity = ok?'1':'.4';
   }
   async function refreshCustBadge(){
@@ -581,31 +698,43 @@ async function endSession(sessionId){
       badge.innerHTML = existingCust ? `<div class="pill green" style="margin-top:6px">Existing Customer ✓ — ${existingCust.visits} visits, ${fmt(existingCust.totalSpend)} lifetime</div>` : `<div class="pill neon" style="margin-top:6px">New Customer</div>`;
     } else { badge.innerHTML = ''; }
   }
+  function refreshContactFields(){
+    const wrap = document.getElementById('contactFields');
+    if(wrap) wrap.style.opacity = form.sendBill ? '1' : '.5';
+    const req = document.getElementById('contactReqNote');
+    if(req) req.style.display = form.sendBill ? 'block' : 'none';
+    updateCompleteBtn();
+  }
 
   openModal(`
     <button class="close" onclick="closeModal()">✕</button>
     <h3>Checkout — ${cfg.console} ${s.players}P</h3>
-    <label>Customer Name</label><input id="ckName" placeholder="Customer name" oninput="window.__ckOnName(this.value)">
-    <label>Mobile Number (+91)</label><input id="ckMobile" maxlength="10" inputmode="numeric" placeholder="10-digit mobile" oninput="window.__ckOnMobile(this.value)">
-    <div id="custBadge"></div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:6px"><input type="checkbox" id="ckSendBill" style="width:auto" checked onchange="window.__ckOnSendBill(this.checked)"> Send digital bill via WhatsApp</label>
+    <div id="contactFields">
+      <label>Customer Name ${!form.sendBill?'(optional)':''}</label><input id="ckName" placeholder="Customer name" oninput="window.__ckOnName(this.value)">
+      <label>Mobile Number (+91) ${!form.sendBill?'(optional)':''}</label><input id="ckMobile" maxlength="10" inputmode="numeric" placeholder="10-digit mobile" oninput="window.__ckOnMobile(this.value)">
+      <div id="custBadge"></div>
+      <div id="contactReqNote" class="muted" style="font-size:11px;margin-top:4px">Required to send the WhatsApp bill.</div>
+    </div>
     <label>Accompanying Persons</label><input id="ckAccompany" type="number" min="0" value="0" oninput="window.__ckOnAccompany(this.value)">
     <label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input type="checkbox" id="ckParent" style="width:auto" onchange="window.__ckOnParent(this.checked)"> Parent accompanying child? (free)</label>
-    <label>Discount (₹)</label><input id="ckDiscount" type="number" min="0" value="0" oninput="window.__ckOnDiscount(this.value)">
+    <label>Discount (%)</label><input id="ckDiscount" type="number" min="0" max="100" value="0" oninput="window.__ckOnDiscount(this.value)">
     <div class="section-title">Bill Summary</div>
     <div id="billSummary">${billHtml().html}</div>
     <label>Payment Method</label>
     <select id="ckPayMethod" onchange="window.__ckOnPay(this.value)">
       <option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Other</option>
     </select>
-    <button class="btn primary" id="completeBtn" style="margin-top:14px" onclick="completePayment(${sessionId})" disabled style="opacity:.4">COMPLETE PAYMENT</button>
+    <button class="btn primary" id="completeBtn" style="margin-top:14px" onclick="completePayment(${sessionId})">COMPLETE PAYMENT</button>
   `);
 
   window.__ckOnName = (v)=>{ form.name=v; updateCompleteBtn(); };
   window.__ckOnMobile = (v)=>{ form.mobile=v.replace(/\D/g,'').slice(0,10); const el=document.getElementById('ckMobile'); if(el && el.value!==form.mobile) el.value=form.mobile; updateCompleteBtn(); refreshCustBadge(); };
   window.__ckOnAccompany = (v)=>{ form.accompany=v; refreshSummary(); };
   window.__ckOnParent = (v)=>{ form.parentChild=v; refreshSummary(); };
-  window.__ckOnDiscount = (v)=>{ form.discount=v; refreshSummary(); };
+  window.__ckOnDiscount = (v)=>{ form.discountPercent=v; refreshSummary(); };
   window.__ckOnPay = (v)=>{ form.payMethod=v; };
+  window.__ckOnSendBill = (v)=>{ form.sendBill=v; refreshContactFields(); };
   window.__checkoutForm = ()=>form;
   updateCompleteBtn();
 }
@@ -614,41 +743,49 @@ async function completePayment(sessionId){
   const s = await dbGet('sessions', sessionId);
   const cfg = CONSOLE_CONFIGS[s.configKey];
   const settings = state.settings;
+  const sendBill = !!form.sendBill;
   const name = form.name.trim(), mobile = form.mobile.trim();
-  if(!name || mobile.length!==10){ alert('Enter valid name and 10-digit mobile number.'); return; }
-  const accompanyVal = Number(form.accompany)||0, discountVal = Number(form.discount)||0, parentChild = !!form.parentChild, payMethod = form.payMethod;
+  if(sendBill && (!name || mobile.length!==10)){ alert('Enter a valid name and 10-digit mobile number, or turn off "Send digital bill" to skip contact details.'); return; }
+  const accompanyVal = Number(form.accompany)||0, parentChild = !!form.parentChild, payMethod = form.payMethod;
+  const discountPercent = Math.min(100, Math.max(0, Number(form.discountPercent)||0));
 
   const gamingAmt = chargeFor(s.billableMinutes, cfg.rates[s.players][0], cfg.rates[s.players][1]);
   const foodAmt = s.items.reduce((sum,it)=>sum+it.price*it.qty,0);
   const accAmt = parentChild ? 0 : chargeFor(s.billableMinutes, settings.accompanyHourRate, settings.accompanyHalfRate) * accompanyVal;
   const subtotal = gamingAmt + accAmt + foodAmt;
+  const discountVal = subtotal * discountPercent/100;
   const tax = settings.taxEnabled ? (subtotal-discountVal)*settings.taxRate/100 : 0;
   const grand = subtotal - discountVal + tax;
 
-  let cust = await dbGet('customers', mobile);
-  const nowIso = new Date().toISOString();
-  if(!cust){ cust = { mobile, name, email:'', address:'', joined:nowIso, visits:0, gamingSessions:0, gamingHours:0, gamingSpend:0, foodSpend:0, totalSpend:0, lastVisit:nowIso, invoiceIds:[] }; }
-  cust.name = name; cust.visits += 1; cust.gamingSessions += 1; cust.gamingHours += s.billableMinutes/60;
-  cust.gamingSpend += gamingAmt + accAmt; cust.foodSpend += foodAmt; cust.totalSpend += grand; cust.lastVisit = nowIso;
+  const hasContact = mobile.length===10;
+  let cust = null;
+  if(hasContact){
+    cust = await dbGet('customers', mobile);
+    const nowIso = new Date().toISOString();
+    if(!cust){ cust = { mobile, name: name||'Walk-in Customer', email:'', address:'', joined:nowIso, visits:0, gamingSessions:0, gamingHours:0, gamingSpend:0, foodSpend:0, totalSpend:0, lastVisit:nowIso, invoiceIds:[] }; }
+    if(name) cust.name = name;
+    cust.visits += 1; cust.gamingSessions += 1; cust.gamingHours += s.billableMinutes/60;
+    cust.gamingSpend += gamingAmt + accAmt; cust.foodSpend += foodAmt; cust.totalSpend += grand; cust.lastVisit = nowIso;
+  }
 
   for(const item of s.items){ if(item.productId){ const p = await dbGet('products', item.productId); if(p && p.combo===undefined){ p.stock = Math.max(0, p.stock - item.qty); await dbPut('products', p); } } }
 
   const invNo = settings.invoicePrefix + String(settings.nextInvoiceNo).padStart(6,'0');
   settings.nextInvoiceNo += 1; await dbPut('settings', settings); state.settings = settings;
 
-  const invoice = { number: invNo, date: Date.now(), customerName:name, customerMobile:mobile,
+  const invoice = { number: invNo, date: Date.now(), customerName: name || 'Walk-in Customer', customerMobile: mobile,
     console:cfg.console, tv:cfg.tv, players:s.players, durationMins:s.billableMinutes,
     gamingAmount: gamingAmt, accompanyAmount: accAmt, accompanyCount: accompanyVal,
-    foodAmount: foodAmt, items: s.items, subtotal, discount: discountVal, tax, grandTotal: grand, paymentMethod: payMethod };
+    foodAmount: foodAmt, items: s.items, subtotal, discountPercent, discount: discountVal, tax, grandTotal: grand, paymentMethod: payMethod };
   const invId = await dbPut('invoices', invoice);
-  cust.invoiceIds.push(invId); await dbPut('customers', cust);
+  if(cust){ cust.invoiceIds.push(invId); await dbPut('customers', cust); }
 
   s.status='completed'; s.endTime=Date.now(); await dbPut('sessions', s);
   await creditAccount(payMethod, grand);
   await updateDailyRecord(dateKey(invoice.date));
 
   closeModal();
-  showInvoiceSuccess({...invoice, id:invId});
+  showInvoiceSuccess({...invoice, id:invId}, sendBill && hasContact);
 }
 async function creditAccount(payMethod, amount){
   const accName = PAY_TO_ACCOUNT[payMethod] || 'Other';
@@ -669,21 +806,23 @@ function waMessage(inv){
   lines.push(`Subtotal: ${fmt(inv.subtotal)}`, `Discount: ${fmt(inv.discount)}`, `Tax: ${fmt(inv.tax)}`, `TOTAL: ${fmt(inv.grandTotal)}`, '', `Payment: ${inv.paymentMethod}`, '', state.settings.footer);
   return lines.join('\n');
 }
-function showInvoiceSuccess(inv){
+function showInvoiceSuccess(inv, sendBill){
   const msg = waMessage(inv);
   openModal(`
     <button class="close" onclick="closeModal()">✕</button>
     <h3 style="color:var(--green)">PAYMENT SUCCESSFUL ✓</h3>
-    <p class="muted">Invoice ${inv.number} created. Opening WhatsApp with the bill…</p>
+    <p class="muted">Invoice ${inv.number} created.${sendBill?' Opening WhatsApp with the bill…':''}</p>
+    ${sendBill ? `
     <label>WhatsApp Message (editable)</label>
     <textarea id="waMsg" rows="10">${msg}</textarea>
     <button class="btn green" style="margin-top:10px" onclick="sendWhatsApp('${inv.customerMobile}')">📱 SEND BILL ON WHATSAPP</button>
+    ` : `<p class="muted" style="font-size:12px">No contact details were collected for this sale — bill was not sent.</p>`}
     <button class="btn" style="margin-top:8px" onclick="printInvoice(${inv.id})">🖨️ Print / Save PDF</button>
     <button class="btn ghost" style="margin-top:8px" onclick="closeModal(); go('dashboard')">Done</button>
   `);
   // Auto-trigger WhatsApp click-to-chat right away; the button above remains as a reliable
   // fallback in case the browser's popup blocker stops the automatic attempt.
-  try{ sendWhatsApp(inv.customerMobile); }catch(e){}
+  if(sendBill){ try{ sendWhatsApp(inv.customerMobile); }catch(e){} }
 }
 function sendWhatsApp(mobile){ const text = document.getElementById('waMsg').value; window.open(`https://wa.me/91${mobile}?text=${encodeURIComponent(text)}`, '_blank'); }
 async function printInvoice(id){
@@ -1102,8 +1241,19 @@ function screenMore(){
 }
 
 /* ============ Settings ============ */
-function screenSettings(){
+async function screenSettings(){
   const s = state.settings;
+  const products = await dbAll('products');
+  const consoleRows = Object.entries(CONSOLE_CONFIGS).map(([key,cfg])=>`
+    <div class="section-title">${cfg.console} — ${cfg.tv}</div>
+    ${[1,2,3,4].map(p=>`
+      <div class="row" style="align-items:center;gap:8px;margin-bottom:6px">
+        <span class="muted" style="width:56px;font-size:12px">${p} Player${p>1?'s':''}</span>
+        <input id="rate-${key}-${p}-hour" type="number" value="${cfg.rates[p][0]}" placeholder="₹/hour">
+        <input id="rate-${key}-${p}-half" type="number" value="${cfg.rates[p][1]}" placeholder="₹/30min">
+      </div>`).join('')}
+  `).join('');
+
   return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
   <h2>Settings</h2>
   <div class="card">
@@ -1121,7 +1271,83 @@ function screenSettings(){
     <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" style="width:auto" id="setTaxOn" ${s.taxEnabled?'checked':''}> Enable Tax</label>
     <label>Tax Rate (%)</label><input id="setTaxRate" type="number" value="${s.taxRate}">
     <button class="btn primary" style="margin-top:12px" onclick="saveSettings()">Save Settings</button>
+  </div>
+
+  <div class="card">
+    <h3>Console Pricing</h3>
+    <p class="muted" style="font-size:12px">Edit the hourly and 30-minute rate for each console and player count.</p>
+    ${consoleRows}
+    <div class="grid2" style="margin-top:8px">
+      <button class="btn primary" onclick="saveConsoleRates()">Save Pricing</button>
+      <button class="btn" onclick="resetConsoleRates()">Reset to Defaults</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Menu Management</h3>
+    <button class="btn primary" style="margin-bottom:10px" onclick="addProductModal()">➕ Add Product</button>
+    ${products.map(p=>`
+      <div class="list-item">
+        <div>${p.name}<br><span class="muted" style="font-size:11px">${p.cat}${p.combo!==undefined?' · combo':''}</span></div>
+        <div class="row" style="gap:6px;align-items:center">
+          <input id="price-${p.id}" type="number" value="${p.price}" style="width:80px;padding:8px">
+          <button class="btn sm" onclick="saveProductPrice(${p.id})">Save</button>
+          <button class="btn sm" style="border-color:var(--red);color:var(--red)" onclick="deleteProduct(${p.id})">✕</button>
+        </div>
+      </div>`).join('')}
   </div>`;
+}
+async function saveConsoleRates(){
+  const updated = JSON.parse(JSON.stringify(CONSOLE_CONFIGS));
+  for(const key of Object.keys(updated)){
+    for(const p of [1,2,3,4]){
+      const hour = Number(document.getElementById(`rate-${key}-${p}-hour`).value)||0;
+      const half = Number(document.getElementById(`rate-${key}-${p}-half`).value)||0;
+      updated[key].rates[p] = [hour, half];
+    }
+  }
+  CONSOLE_CONFIGS = updated;
+  await dbPut('settings', { key:'consoleRates', configs: CONSOLE_CONFIGS });
+  alert('Console pricing saved.'); render();
+}
+async function resetConsoleRates(){
+  if(!confirm('Reset all console pricing to the original defaults?')) return;
+  CONSOLE_CONFIGS = JSON.parse(JSON.stringify(DEFAULT_CONSOLE_CONFIGS));
+  await dbPut('settings', { key:'consoleRates', configs: CONSOLE_CONFIGS });
+  render();
+}
+function addProductModal(){
+  openModal(`
+    <button class="close" onclick="closeModal()">✕</button>
+    <h3>Add Product</h3>
+    <label>Name</label><input id="npName" placeholder="e.g. Masala Fries">
+    <label>Category</label><input id="npCat" placeholder="e.g. Veg Bites">
+    <label>Price (₹)</label><input id="npPrice" type="number" value="0">
+    <label>Starting Stock</label><input id="npStock" type="number" value="0">
+    <label>Low Stock Alert Below</label><input id="npMin" type="number" value="10">
+    <button class="btn primary" style="margin-top:10px" onclick="confirmAddProduct()">Add Product</button>
+  `);
+}
+async function confirmAddProduct(){
+  const name = document.getElementById('npName').value.trim();
+  const cat = document.getElementById('npCat').value.trim() || 'Other';
+  const price = Number(document.getElementById('npPrice').value)||0;
+  const stock = Number(document.getElementById('npStock').value)||0;
+  const min = Number(document.getElementById('npMin').value)||0;
+  if(!name) return alert('Enter a product name.');
+  await dbPut('products', { name, cat, price, stock, min });
+  closeModal(); go('settings');
+}
+async function saveProductPrice(id){
+  const p = await dbGet('products', id);
+  p.price = Number(document.getElementById('price-'+id).value)||0;
+  await dbPut('products', p);
+  alert('Price updated.');
+}
+async function deleteProduct(id){
+  if(!confirm('Delete this product from the menu? Past invoices are not affected.')) return;
+  await dbDel('products', id);
+  render();
 }
 async function saveSettings(){
   const s = state.settings;
@@ -1161,6 +1387,7 @@ async function doBackup(){
   const d = new Date().toISOString().slice(0,10);
   const filename = `LVL-Books-Backup-${d}.json`;
   const blob = new Blob([json], {type:'application/json'});
+  await recordBackupTime();
   try{
     const file = new File([blob], filename, {type:'application/json'});
     if(navigator.canShare && navigator.canShare({files:[file]})){
@@ -1171,6 +1398,18 @@ async function doBackup(){
   const url = URL.createObjectURL(blob); const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
 }
+async function recordBackupTime(){
+  const s = state.settings;
+  s.lastBackupAt = Date.now();
+  await dbPut('settings', s);
+  state.showBackupReminder = false;
+}
+async function maybeAutoBackup(){
+  const s = state.settings;
+  const TWO_WEEKS = 14*24*60*60*1000;
+  state.showBackupReminder = !s.lastBackupAt || (Date.now() - s.lastBackupAt) >= TWO_WEEKS;
+}
+function dismissBackupReminder(){ state.showBackupReminder = false; render(); }
 async function doRestore(){
   const file = document.getElementById('restoreFile').files[0];
   if(!file) return alert('Choose a backup file first.');

@@ -1,11 +1,12 @@
-const CACHE_NAME = 'lvl-books-v1';
+const CACHE_NAME = 'lvl-books-v2';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/icon-maskable-512.png'
+  './icons/icon-maskable-512.png',
+  './icons/favicon-64.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -26,8 +27,12 @@ self.addEventListener('activate', (event) => {
 
 // Cache-first for the app shell; falls back to network, then to the cached
 // index.html for navigations so the app still opens with no signal at all.
+// Cross-origin requests (Firebase/Firestore, Google Fonts, etc.) are left completely
+// alone — this service worker only ever touches this app's own same-origin files.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
