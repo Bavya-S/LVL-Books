@@ -33,7 +33,7 @@ initializeApp();
 
 const COLLECTIONS = [
   "customers", "sessions", "invoices", "products", "expenses", "settings",
-  "vendors", "purchases", "employees", "employeeTx", "accounts", "dailyRecords", "counters"
+  "vendors", "purchases", "employees", "employeeTx", "accounts", "dailyRecords", "counters", "bsessions", "stations", "inventoryTx", "physical"
 ];
 
 exports.scheduledFirestoreBackup = onSchedule(

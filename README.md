@@ -114,28 +114,89 @@ That preview link still works, but it stores data locally in the browser only
 project is the real, full-featured, multi-device version** — treat it as the one to
 actually run your business on.
 
-## 8. Everything else that changed in this build
-- Session deletion: every active gaming session has a 🗑️ button, no blocks.
-- Checkout: "Send digital bill via WhatsApp" toggle — turn it off to skip name/phone
-  entirely for walk-ins who don't want a text.
-- Discounts are now a percentage of the bill, not a flat rupee amount.
-- Settings → Console Pricing: edit every console/player-count rate without touching code.
-- Settings → Menu Management: add, reprice, or delete food/beverage items.
-- Reports page bug fixed (a real crash was found and fixed — it was throwing an error
-  every time the page tried to render, which is why it looked like it "wasn't loading").
-- Light/dark theme toggle (top-right of every screen).
-- App icon is now your actual LVL Gaming Café logo everywhere (favicon, home-screen icon,
-  install prompts).
+## 8. How billing works: Start Session → Add Lines → Edit → Checkout → One Invoice
 
-## 9. Testing notes (so you know this isn't just untested code)
+A **session** is the master bill. Tap **Start Session** (no customer details needed) and it exists immediately as
+`LVL-SES-000123`. Everything on it is a **line** with its own permanent ID that you can add, edit, copy or delete.
+Every change is saved the instant you make it, so closing the app, losing signal or restarting the phone loses nothing.
 
-Before packaging this, I ran the entire app's logic — billing math, checkout with the new
-optional-contact toggle, session start/extend/delete, food item add/edit/remove, console
-pricing edits, menu CRUD, vendor/purchase/employee flows, daily records, reports
-rendering, backup/restore, and the theme toggle — against a simulated Firestore backend
-that mimics the real `getDocs`/`setDoc`/`onSnapshot`/`writeBatch` API. All 30 scenarios
-passed. I can't reach the real `lvl-books-2dbab` project from this sandbox (its network
-is locked down to a short list of package-registry domains), so the one thing I
-genuinely could not test end-to-end is your exact live Firebase project responding over
-the real network — that first real connection is worth watching closely the first time
-you open the app.
+**Add New Line = a full-screen POS picker.** Items are grouped by category (Gaming — PS4 / PS5 55-inch / PS5 65-inch /
+PS5 Pro 65-inch / Gaming PCs, Accompanying Persons, Food, Beverages, Combos, Overtime Charges, Other Items), with a
+search box and category chips.
+- **Gaming variants** are listed individually — "PS4 — 3 Players  ₹260/hour · ₹130/30 min". Tap **Add** and a running
+  1-hour segment is on the bill immediately (no console/player configuration step). You can add as many PS4 (or any)
+  lines as you like; each is independent.
+- **Food, drinks, overtime, other items** have a **[−] n [+]** stepper. The row highlights, and a bar at the bottom always
+  shows e.g. **2 item types · 5 units · ₹300** — *before* anything is added. **Add Selected Items** adds them once
+  (double-taps are ignored; if it fails your selection is kept). Re-opening the picker shows "On bill: 2" for what is
+  already billed, so the screen never disagrees with the bill.
+- **Accompanying persons:** choose number of persons and duration, see the estimate ("2 persons × 30m × ₹50/h = ₹50"),
+  optionally mark **Free (parent)**. They become ordinary editable lines — never a hidden surcharge.
+- **Combos** ask for the two included drinks (not charged again).
+
+**Gaming segments.** Each segment has its own start time, end time and billed duration. Buttons on a running segment:
+**+30m, +1h, End, Players** (ends the segment and starts the next player-count variant — "4 players → 3 players"),
+**Switch** (ends it and opens the picker for another setup), **Edit, Copy, Delete**. Ending a segment asks you to confirm
+the time to bill (pre-filled with time played, rounded up to 30 minutes with a 2-minute grace). **An ended segment never
+grows afterwards**, and **running segments must be ended explicitly before the invoice can be finalized** (Checkout shows
+an *End segments…* button). Corrected durations/rates/players/start/end times are kept in a per-line **edit history**.
+
+**Physical stations (optional).** Settings → Physical Stations lists the real consoles ("PS4 #1", "PS4 #2"). Assign one to
+a segment and that console can't be in two running segments at once — while any number of segments of the same *model*
+are always allowed.
+
+**Delete.** Every unfinalized line has a visible **Delete**. A running gaming segment asks: *End segment / Remove line
+(mistake) / Correct duration*. Deleting removes that one line by its ID. If a screen is out of date (or another phone
+already removed the line) you are told, and it is never brought back by a later save.
+*Root cause of the "Delete does nothing" problem:* the app used the browser's built-in `confirm()` pop-up. Phone browsers
+can silently suppress those ("prevent this page from creating more dialogs"), which makes the button look dead. All
+prompts are now in-app dialogs that can't be suppressed. In addition, every change now re-reads the latest saved session
+and writes atomically, so a stale screen or a second phone can no longer overwrite or resurrect lines.
+
+**Checkout** (full review page): customer lookup by mobile, items, invoice details, discount % (**gaming lines only —
+food is never discounted**), split payments, and a sticky **Finalize Invoice** bar. The invoice number is issued only at
+finalize (atomic across phones). **Finalized invoices are locked** — correct them with **Credit / Refund** (reason
+required, audit trail kept) and **Record payment** for balances. Then: **Download PDF** (built in, works offline),
+**Print**, **Copy summary**, **Open WhatsApp** (pre-filled; sent only when you press Send in WhatsApp).
+
+**Settings (12 pages):** Items Catalogue · **Gaming Setups & Variants** (add/edit/deactivate/reorder variants; add a
+gaming PC and its variants appear in the picker immediately) · **Physical Stations** · Gaming Pricing · Custom Duration
+Rules (off by default: standard policy is hours + 30-minute blocks) · Overtime · Accompanying persons · Taxes · Invoice
+Numbering · Business Details · Staff Permissions (Admin/Staff mode, optional PIN) · Backup & Restore.
+
+**Look & scrolling.** Minimalist dark charcoal theme (light available from the top bar), one accent colour, no glow,
+gradients, animations or emoji; respects reduced-motion. The page itself scrolls (no nested scroll areas); every screen
+reserves space for the bottom navigation, sticky action bars and Android/iOS safe areas; bottom sheets and dialogs scroll
+on their own; focused inputs scroll into view above the keyboard.
+
+**Upgrading:** all existing data is kept — invoices, customers, inventory, items, prices, running sessions (old lines keep
+working) and invoice numbering. Old setups get names/categories automatically.
+
+## 9. Other things in this build
+- Mobile: every screen has extra bottom clearance, safe-area padding and a spacer, so the last button is always
+  reachable above the bottom navigation / phone home indicator; modals scroll smoothly.
+- Light / dark theme toggle (top-right). App icon is your LVL Gaming Café logo (favicon, home screen, install).
+- Reports page fixed and extended; daily revenue log with per-day detailed export; monthly/weekly charts.
+- Vendors, purchases (update stock), employees, cash & bank balances, recurring expenses, CSV exports, demo data.
+- Backup reminder every 14 days; optional server-side scheduled backup in `functions/` (paid Firebase plan).
+
+## 10. Testing notes
+
+Four independent suites were run against both builds:
+1. **Logic tests (19 scenarios × 2 builds)** — all 11 acceptance tests in the spec (A–J), concurrency (6 simultaneous adds,
+   nothing lost), stale-screen deletes, physical-station rules, edit history, rounding, checkout/invoice/credit/refund,
+   WhatsApp text, PDF, permissions, backup/clear, demo data and every screen.
+2. **Multi-device (10 scenarios)** — two simulated phones on one shared cloud: live sync, simultaneous edits to the same
+   session, physical stations across phones, unique invoice numbers, no repaint while typing, near-zero reads.
+3. **Upgrade (4 scenarios)** — data written by the previous version migrates and keeps working.
+4. **Real browser (12 scenarios)** — headless Chromium on a 360×640 touch viewport: real taps (a tap that would land on a
+   covering element fails), Add/Delete/Add-Selected, scroll-to-bottom on 18 screens with a 40-item catalogue, sheet
+   scrolling, sticky footers never covering the last control, no gradients/glow/animation, no JavaScript errors.
+Also verified: all 125 inline button handlers point to real functions.
+
+Not testable from here: your live `lvl-books-2dbab` Firebase project over the real network, and an on-screen keyboard.
+Open it on a phone and run a couple of test bills before relying on it.
+
+**Known limits:** the Firestore build keeps the last 120 days of invoices/sessions loaded (older invoices open on demand;
+daily totals are kept forever). Phones that are offline create unique but non-sequential session numbers. WhatsApp can't
+be sent automatically. The Admin PIN is a convenience lock per device.

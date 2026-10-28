@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lvl-books-v2';
+const CACHE_NAME = 'lvl-books-v5';
 const APP_SHELL = [
   './',
   './index.html',
