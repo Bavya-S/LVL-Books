@@ -154,6 +154,27 @@ td,th{padding:6px 4px;text-align:left;border-bottom:1px solid var(--line)}
 .dlg .acts .btn{flex:1 1 120px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + var(--foot-h) + 16px + env(safe-area-inset-bottom,0px));background:var(--text);color:var(--bg);padding:9px 14px;border-radius:6px;font-size:13px;z-index:50;max-width:90%;text-align:center}
 .banner{position:fixed;left:12px;right:12px;bottom:calc(var(--nav-h) + var(--foot-h) + 12px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--panel);border:1px solid var(--amber);border-left:4px solid var(--amber);padding:12px;border-radius:6px;max-width:536px;margin:0 auto}
+/* ---- Active session cards: the WHOLE card is one tap target (a transparent button stretched over the card);
+   the action buttons sit above it, so tapping them never opens the session and no click handlers are nested. ---- */
+.sess-card{position:relative;overflow:hidden}
+.sess-open{position:absolute;inset:0;z-index:1;width:100%;height:100%;margin:0;padding:0;border:0;border-radius:inherit;background:transparent;cursor:pointer;-webkit-appearance:none;appearance:none;touch-action:manipulation}
+@media (hover:hover){.sess-open:hover{background:color-mix(in srgb,var(--text) 5%,transparent)}}
+.sess-open:active{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.sess-open:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.sess-card:has(.sess-open:active){border-color:var(--accent)}
+.sess-card .sess-acts .btn{position:relative;z-index:2}
+.sess-chev{color:var(--muted);font-size:20px;line-height:1;margin-left:6px;vertical-align:middle}
+/* ---- top bar back / home ---- */
+.tb-left{display:flex;align-items:center;gap:8px;min-width:0}
+.tb-btn{display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--line);color:var(--text);border-radius:6px;min-height:36px;min-width:36px;padding:0;cursor:pointer}
+.tb-btn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.tb-btn:active{background:var(--line)}
+.catbar,.modal{overscroll-behavior-x:contain}
+/* ---- admin invoice management ---- */
+.adm-row .list-item{align-items:flex-start}
+.adm-main{flex:1;min-width:0;cursor:pointer}
+.adm-chk input{width:22px;height:22px;margin:2px 4px 0 0}
+.adm-bulk{position:sticky;top:calc(52px + env(safe-area-inset-top,0px));z-index:4;background:var(--bg);padding:6px 0}
 ::-webkit-scrollbar{width:0;height:0}
 @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important;scroll-behavior:auto!important} }
 </style>
@@ -179,8 +200,8 @@ function waitForFirebase(){
   });
 }
 const KEYPATH = { customers:'mobile', bsessions:'id', invoices:'id', products:'id', expenses:'id', settings:'key', vendors:'id', purchases:'id',
-  employees:'id', employeeTx:'id', accounts:'name', dailyRecords:'date', stations:'id', inventoryTx:'id', physical:'id' };
-const AUTOINC = new Set(['bsessions','invoices','products','expenses','vendors','purchases','employees','employeeTx','stations','inventoryTx','physical']);
+  employees:'id', employeeTx:'id', accounts:'name', dailyRecords:'date', stations:'id', inventoryTx:'id', physical:'id', deletedInvoices:'id', auditLog:'id' };
+const AUTOINC = new Set(['bsessions','invoices','products','expenses','vendors','purchases','employees','employeeTx','stations','inventoryTx','physical','auditLog']);
 const WINDOWED = { invoices:{field:'date',days:120}, bsessions:{field:'startTime',days:120}, inventoryTx:{field:'date',days:120} };
 const __cache = {}, __ready = {};
 function clean(v){ return v===undefined ? v : JSON.parse(JSON.stringify(v)); }   // deep copy; also strips undefined (Firestore rejects it)
@@ -413,7 +434,7 @@ function overtimeUnitLabel(s){
   return (s.overtimeBlockMinutes||10)+'-min block';
 }
 
-const ALL_STORES = ['customers','bsessions','invoices','products','expenses','settings','vendors','purchases','employees','employeeTx','accounts','dailyRecords','stations','inventoryTx','physical'];
+const ALL_STORES = ['customers','bsessions','invoices','products','expenses','settings','vendors','purchases','employees','employeeTx','accounts','dailyRecords','stations','inventoryTx','physical','deletedInvoices','auditLog'];
 
 /* ============ CSV export ============ */
 function toCSV(rows){
@@ -433,7 +454,7 @@ async function exportAllCSV(){
 }
 
 /* ============ App state ============ */
-let state = { screen:'dashboard', settings:null, custProfile:null, vendorId:null, reportRange:'today', reportStart:null, reportEnd:null, sessionId:null, billEdSid:null, sessFilter:'open', invFilter:'all', ckForm:null, ckSession:null, invoiceId:null, finalizing:false, afterEnd:null, pick:null };
+let state = { screen:'dashboard', settings:null, custProfile:null, vendorId:null, reportRange:'today', reportStart:null, reportEnd:null, sessionId:null, billEdSid:null, sessFilter:'open', invFilter:'all', ckForm:null, ckSession:null, invoiceId:null, finalizing:false, afterEnd:null, pick:null, pendingScroll:null, adm:{ tab:'active', q:'', from:'', to:'', status:'all', method:'all', sel:{} } };
 
 async function loadSettingsAndSeed(){
   let s = await dbGet('settings','main');
@@ -481,6 +502,7 @@ async function boot(){
   await loadSettingsAndSeed();
   await maybeAutoBackup();
   setupManifestAndInstall();
+  setupNavigation();
   render();
 }
 function initTheme(){
@@ -551,9 +573,104 @@ const NAV = [
 ];
 function renderNav(){
   document.getElementById('navbar').innerHTML = NAV.map(n=>`
-    <button class="navbtn ${(state.screen===n.id || (n.id==='gaming' && ['session','checkout','picker'].includes(state.screen)) || (n.id==='invoices' && state.screen==='invoiceView') || (n.id==='more' && /^set_|settings|backup/.test(state.screen)))?'active':''}" onclick="go('${n.id}')"><span class="ic">${n.ic}</span>${n.label}</button>`).join('');
+    <button class="navbtn ${(state.screen===n.id || (n.id==='gaming' && ['session','checkout','picker'].includes(state.screen)) || (n.id==='invoices' && state.screen==='invoiceView') || (n.id==='more' && /^set_|settings|backup|adminInvoices/.test(state.screen)))?'active':''}" onclick="navTab('${n.id}')"><span class="ic">${n.ic}</span>${n.label}</button>`).join('');
 }
-function go(screen){ state.screen=screen; try{ window.scrollTo(0,0); }catch(e){} render(); }
+/* ---- Android-style navigation ----
+   navStack is the in-memory Back stack (screens you can go Back to). The Android Back button / gesture arrives as a browser
+   'popstate'; a guard history entry makes sure every Back press is caught by the app instead of closing it.
+   Active gaming sessions live in the database, so navigating Back never discards one. */
+const NAV_TABS = ['dashboard','gaming','inventory','invoices','more'];
+const NAV_IDENTITY = ['sessionId','invoiceId','custProfile','vendorId','empId'];
+let navStack = [];                       // previous screens, most recent last
+let navCur = { screen:'dashboard', scrollY:0 };   // identity of the screen on display
+let navBusy = false, navExiting = false, navExitStep = 0;
+function navSnap(){
+  const e = { screen:state.screen, scrollY:Math.round(window.scrollY||0) };
+  NAV_IDENTITY.forEach(k=>{ if(state[k]!==undefined && state[k]!==null) e[k]=state[k]; });
+  if(state.screen==='picker' && state.pick) e.sessionId = state.pick.sid;
+  if(state.screen==='checkout' && state.ckForm) e.sessionId = state.ckForm.sid;
+  return e;
+}
+function navKey(e){
+  const id = ['session','picker','checkout'].includes(e.screen) ? e.sessionId : e.screen==='invoiceView' ? e.invoiceId : e.screen==='customerProfile' ? e.custProfile : e.screen==='vendorProfile' ? e.vendorId : e.screen==='employeeProfile' ? e.empId : '';
+  return e.screen + ':' + (id===undefined||id===null ? '' : id);
+}
+function go(screen, opts){
+  opts = opts||{};
+  navCur.scrollY = Math.round(window.scrollY||0);
+  let scroll = 0;
+  state.screen = screen;
+  const next = navSnap();
+  if(NAV_TABS.includes(screen)){      // tab / Dashboard: the Dashboard becomes the root of the stack
+    const dashScroll = navCur.screen==='dashboard' ? navCur.scrollY : (navStack[0] && navStack[0].screen==='dashboard' ? navStack[0].scrollY : 0);
+    navStack = screen==='dashboard' ? [] : [{ screen:'dashboard', scrollY:dashScroll }];
+    if(screen==='dashboard' && navCur.screen==='dashboard') scroll = navCur.scrollY;
+  } else {
+    let idx = -1; const nk = navKey(next);
+    for(let i=navStack.length-1;i>=0;i--){ if(navKey(navStack[i])===nk){ idx=i; break; } }
+    if(idx>=0){ scroll = navStack[idx].scrollY||0; navStack.length = idx; }   // going to a screen already in the stack = going back to it
+    else if(!opts.replace && !(['picker','checkout'].includes(navCur.screen) && screen==='session') && navKey(navCur)!==nk){ navStack.push(Object.assign({}, navCur)); }
+  }
+  navCur = next; state.pendingScroll = scroll;
+  return render();
+}
+function navRestore(e){
+  NAV_IDENTITY.forEach(k=>{ if(e[k]!==undefined) state[k]=e[k]; });
+  state.screen = e.screen; state.billEdSid = null; navCur = Object.assign({}, e); state.pendingScroll = e.scrollY||0;
+  return render();
+}
+/* Things that must be settled before leaving a screen. Returns false if the user chose to stay. */
+async function leaveGuard(){
+  if(state.screen==='picker' && state.pick){
+    const t = pkTotals();
+    if(t.types && !(await askConfirm(`${t.types} selected item type(s) have not been added to the bill. Discard them?`,'Discard',true))) return false;
+  } else if(state.screen==='session'){ await persistHeader(state.sessionId, true); }   // unsaved header edits are saved, never lost
+  return true;
+}
+/* One step back. Picker and checkout return to the session bill; everything else returns to the previous screen. */
+async function goBack(fallback){
+  if(!(await leaveGuard())) return;
+  if(state.screen==='picker' && state.pick){ const sid=state.pick.sid; state.pick=null; openSession(sid); return; }
+  if(state.screen==='checkout' && state.ckForm){ openSession(state.ckForm.sid); return; }
+  const e = navStack.pop();
+  if(e) return navRestore(e);
+  if(state.screen!=='dashboard') return go(fallback && fallback!==state.screen ? fallback : 'dashboard');
+}
+async function navTab(id){ if(!(await leaveGuard())) return; if(state.screen==='picker') state.pick=null; go(id); }
+function dismissTopLayer(){   // dialogs first, then bottom sheets
+  const dlgs = document.querySelectorAll('#dlgRoot .dlg-bg');
+  if(dlgs.length){ dlgs[dlgs.length-1].click(); return true; }
+  const mr = document.getElementById('modalRoot');
+  if(mr && mr.firstElementChild){ const c = mr.querySelector('.close'); if(c) c.click(); else closeModal(); return true; }
+  return false;
+}
+async function handleBack(){
+  if(navBusy) return; navBusy = true;
+  try{
+    if(dismissTopLayer()) return;
+    if(state.screen==='dashboard' && !navStack.length){
+      if(await askConfirm('Exit LVL Books?\n\nOpen gaming sessions stay saved and keep running.','Exit')) exitApp();
+      return;
+    }
+    await goBack();
+  } finally { navBusy = false; }
+}
+function exitApp(){
+  try{ const A = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App; if(A && A.exitApp){ A.exitApp(); return; } }catch(e){}
+  navExiting = true; navExitStep = 0; history.back();   // steps back past the guard entry, which closes an installed Android app
+  setTimeout(()=>{ if(!document.hidden){ navExiting=false; try{ history.pushState({lvl:'app'},''); }catch(e){} showToast('Use the Android Home button to leave the app'); } }, 900);
+}
+function setupNavigation(){
+  try{ history.scrollRestoration = 'manual'; }catch(e){}   // the app restores scroll itself; the browser's own restore would reset it to 0
+  try{ history.replaceState({lvl:'guard'},''); history.pushState({lvl:'app'},''); }catch(e){}
+  window.addEventListener('popstate', ()=>{
+    if(navExiting){ if(navExitStep++===0){ try{ history.back(); }catch(e){} } return; }
+    try{ history.pushState({lvl:'app'},''); }catch(e){}   // re-arm the guard so the next Back is caught too
+    handleBack();
+  });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && dismissTopLayer()) e.preventDefault(); });
+  try{ const A = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App; if(A && A.addListener) A.addListener('backButton', ()=>handleBack()); }catch(e){}
+}
 function closeModal(){ document.getElementById('modalRoot').innerHTML=''; document.body.classList.remove('modal-open'); }
 function openModal(html){ document.body.classList.add('modal-open'); document.getElementById('modalRoot').innerHTML = `<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`; }
 
@@ -567,7 +684,7 @@ async function render(){
     vendors:screenVendors, vendorProfile:screenVendorProfile, purchases:screenPurchases, employees:screenEmployees, employeeProfile:screenEmployeeProfile,
     cashbank:screenCashBank, reports:screenReports, session:screenSession, checkout:screenCheckout, invoiceView:screenInvoiceView,
     set_items:screenSetItems, set_stations:screenSetStations, set_pricing:screenSetPricing, set_custom:screenSetCustom, set_overtime:screenSetOvertime,
-    set_accompany:screenSetAccompany, picker:screenPicker, set_physical:screenSetPhysical, set_tax:screenSetTax, set_invoice:screenSetInvoice, set_business:screenSetBusiness, set_perm:screenSetPerm };
+    set_accompany:screenSetAccompany, picker:screenPicker, set_physical:screenSetPhysical, set_tax:screenSetTax, set_invoice:screenSetInvoice, set_business:screenSetBusiness, set_perm:screenSetPerm, adminInvoices:screenAdminInvoices };
   const fn = SCREENS[state.screen] || screenDashboard;
   let body;
   try{ body = await fn(); }
@@ -580,9 +697,13 @@ async function render(){
   document.body.classList.toggle('nonav', ['picker','checkout'].includes(state.screen));
   document.body.classList.toggle('hasfoot', ['picker','checkout'].includes(state.screen));
   document.body.classList.toggle('tall', state.screen==='picker');
-  root.innerHTML = `<div class="topbar"><div class="brand">LVL <span>Books</span></div><div class="topbar-actions"><button id="installBtn" style="display:none" onclick="triggerInstall()">Install</button><button id="themeBtn" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'Dark':'Light'}</button></div></div>`
+  const nested = !NAV_TABS.includes(state.screen);
+  const backBtn = nested ? `<button class="tb-btn" aria-label="Back" onclick="goBack()"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>` : '';
+  const homeBtn = state.screen!=='dashboard' ? `<button class="tb-btn" aria-label="Go to Dashboard" onclick="navTab('dashboard')" style="margin-right:6px"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg></button>` : '';
+  root.innerHTML = `<div class="topbar"><div class="tb-left">${backBtn}<div class="brand">LVL <span>Books</span></div></div><div class="topbar-actions">${homeBtn}<button id="installBtn" style="display:none" onclick="triggerInstall()">Install</button><button id="themeBtn" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'Dark':'Light'}</button></div></div>`
     + body + `<div style="height:28px"></div>`;
   if(window.deferredInstallPrompt) document.getElementById('installBtn').style.display='inline-block';
+  if(state.pendingScroll!==null && state.pendingScroll!==undefined){ const y=state.pendingScroll; state.pendingScroll=null; try{ window.scrollTo(0,y); }catch(e){} }   // restore the list position after Back
 }
 
 /* ============ In-app dialogs ============ */
@@ -728,7 +849,7 @@ async function screenSession(){
   const t = sessionTotals(s);
   const dis = editable ? '' : 'disabled';
   return `<div class="row" style="align-items:center;justify-content:space-between;margin-bottom:6px">
-      <button class="btn ghost sm" onclick="persistHeader(${s.id},true).then(()=>go('dashboard'))">← Dashboard</button>
+      <button class="btn ghost sm" onclick="goBack('dashboard')">← Back</button>
       <span class="pill ${s.status==='paid'?'green':s.status==='cancelled'?'red':s.status==='hold'?'amber':'neon'}">${STATUS_LABEL[s.status]}</span>
     </div>
     <h2>${sesCode(s)}</h2>
@@ -1247,25 +1368,30 @@ setInterval(tickSessions, 1000);
 /* ============ Dashboard ============ */
 function sessionCard(s){
   const t = sessionTotals(s);
-  const running = s.lines.filter(l=>l.kind==='gaming' && l.state!=='ended').length;
+  const g = s.lines.filter(l=>l.kind==='gaming');
+  const running = g.filter(l=>l.state!=='ended').length;
+  const gMins = g.reduce((a,l)=>a+(Number(l.minutes)||0),0);
   const title = s.groupName || s.customerName || '';
   const pill = s.status==='hold'?'amber':s.status==='ready'?'green':'neon';
-  return `<div class="card">
+  const setups = g.slice(0,3).map(l=>esc(gamingTitle(l))+(l.state==='ended'?' ✓':l.state==='paused'?' ⏸':'')).join(' · ') + (g.length>3 ? ` · +${g.length-3} more` : '');
+  const label = `Open ${sesCode(s)}${title?', '+title:''}. ${STATUS_LABEL[s.status]}. Current bill ${fmt(t.subtotal)}. Opens session management.`;
+  return `<div class="card sess-card" data-sid="${s.id}">
+    <button type="button" class="sess-open" onclick="openSession(${s.id})" aria-label="${esc(label)}"></button>
     <div class="row" style="justify-content:space-between;gap:8px">
       <div style="min-width:0"><b>${sesCode(s)}</b>${title?` · ${esc(title)}`:''}<br><span class="muted" style="font-size:12px">Started ${timeStr(s.startTime)} · ${running} active setup${running===1?'':'s'} · ${s.lines.length} line${s.lines.length===1?'':'s'}</span></div>
-      <span class="pill ${pill}">${STATUS_LABEL[s.status]}</span>
+      <span style="white-space:nowrap"><span class="pill ${pill}">${STATUS_LABEL[s.status]}</span><span class="sess-chev" aria-hidden="true">›</span></span>
     </div>
+    ${g.length?`<div class="muted" style="font-size:12px;margin-top:6px;overflow-wrap:anywhere">${setups} · <b>${fmtDur(gMins)}</b> gaming</div>`:''}
     <div style="font-size:20px;font-weight:600;margin:6px 0 2px">${fmt(t.subtotal)}</div>
     <div class="muted" style="font-size:12px;margin-bottom:8px">Gaming ${fmt(t.gaming)} · Food ${fmt(t.food)} · Accompanying ${fmt(t.accompany)} · Overtime ${fmt(t.overtime)}</div>
-    <div class="grid2">
-      <button class="btn sm primary" onclick="openSession(${s.id})">Open / Manage</button>
+    <div class="grid2 sess-acts">
       <button class="btn sm" onclick="addGamingSegment(${s.id})">Add Gaming Segment</button>
       <button class="btn sm" onclick="addLineModal(${s.id})">Add Item</button>
       <button class="btn sm" onclick="billEditorModal(${s.id})">Edit Bill</button>
       <button class="btn sm" onclick="toggleHold(${s.id})">${s.status==='hold'?'Resume':'Pause'}</button>
       <button class="btn sm" onclick="endAllModal(${s.id})">End Gaming</button>
       <button class="btn sm pink" onclick="openCheckout(${s.id})">Checkout</button>
-      <button class="btn sm danger" onclick="cancelSessionModal(${s.id})">Cancel Session</button>
+      <button class="btn sm danger" style="grid-column:1/-1" onclick="cancelSessionModal(${s.id})">Cancel Session</button>
     </div></div>`;
 }
 async function screenDashboard(){
@@ -1335,7 +1461,8 @@ async function openCheckout(sid){
   if(!s.lines.length){ tell('Add at least one line before checkout.'); return; }
   if(s.status!=='ready') await act(mutateSession(sid, d=>{ d.status='ready'; return true; }));
   const st = state.settings;
-  state.ckForm = { sid, name:s.customerName||'', mobile:s.customerMobile||'', discountPct:0, date:ymd(Date.now()), terms:st.dueTermsDefault||'Due on receipt', orderNo:'', salesperson:st.salesperson||'', subject:'', notes:'', payments:[] };
+  if(state.ckForm && state.ckForm.sid===sid){ state.ckForm.name = state.ckForm.name || s.customerName || ''; state.ckForm.mobile = state.ckForm.mobile || s.customerMobile || ''; }
+  else state.ckForm = { sid, name:s.customerName||'', mobile:s.customerMobile||'', discountPct:0, date:ymd(Date.now()), terms:st.dueTermsDefault||'Due on receipt', orderNo:'', salesperson:st.salesperson||'', subject:'', notes:'', payments:[] };
   go('checkout');
 }
 function ckTotals(){ return billTotals(state.ckSession.lines, state.ckForm.discountPct, state.settings); }
@@ -1622,7 +1749,7 @@ async function screenInvoiceView(){
   if(!inv) return `<div class="empty">Invoice not found.</div><button class="btn" onclick="go('invoices')">Back</button>`;
   const bal = invoiceBalance(inv); const L = invoiceLines(inv);
   const sec = b=>{ const ls=L.filter(x=>x.bucket===b); return ls.length?`<div class="muted" style="font-size:11px;margin-top:8px;text-transform:uppercase">${BUCKET_TITLE[b]}</div>`+ls.map(x=>`<div class="list-item"><span>${esc(x.text)}</span><b>${fmt(x.amount)}</b></div>`).join(''):''; };
-  return `<button class="btn ghost sm" onclick="go('invoices')">← Invoices</button>
+  return `<button class="btn ghost sm" onclick="goBack('invoices')">← Invoices</button>
     <h2>${esc(inv.number)} ${invoiceStatusPill(inv)}</h2>
     <div class="card"><div>${esc(inv.customerName)}${inv.customerMobile?' · '+inv.customerMobile:''}</div>
       <div class="muted" style="font-size:12px">${new Date(inv.date).toLocaleString('en-IN')}${inv.dueDate?' · due '+inv.dueDate:''}${inv.sessionCode?' · '+inv.sessionCode:''}${inv.groupName?' · '+esc(inv.groupName):''}${inv.salesperson?' · by '+esc(inv.salesperson):''}</div>${inv.subject?`<div class="muted" style="font-size:12px">${esc(inv.subject)}</div>`:''}</div>
@@ -1640,7 +1767,8 @@ async function screenInvoiceView(){
       <button class="btn green" onclick="whatsappModal(${inv.id})">Open WhatsApp</button>
       ${bal>0?`<button class="btn primary" onclick="recordPaymentModal(${inv.id})">+ Record payment</button>`:''}
       <button class="btn" onclick="creditRefundModal(${inv.id})">Credit / Refund</button>
-    </div>`;
+    </div>
+    ${isAdmin()?`<button class="btn danger" style="margin-top:10px" onclick="adminDeleteModal([${inv.id}])">Delete invoice (Admin)</button>`:''}`;
 }
 async function syncSessionStatusForInvoice(inv){
   if(!inv.sessionId) return; const s = await dbGet('bsessions', inv.sessionId);
@@ -1698,7 +1826,7 @@ async function screenInvoices(){
   __invCache = (await dbAll('invoices')).sort((a,b)=>b.date-a.date);
   const f = state.invFilter||'all';
   setTimeout(filterInvoices,0);
-  return `<h2>Invoices</h2><input id="invSearch" placeholder="Search number, name or mobile" oninput="filterInvoices()" style="margin-bottom:8px">
+  return `<h2>Invoices</h2>${isAdmin()?`<button class="btn danger" style="margin-bottom:8px" onclick="openAdminInvoices()">Admin: manage / delete invoices</button>`:''}<input id="invSearch" placeholder="Search number, name or mobile" oninput="filterInvoices()" style="margin-bottom:8px">
     <div style="margin-bottom:8px">${[['all','All'],['due','Balance due'],['paid','Paid']].map(([k,l])=>`<span class="chip ${f===k?'sel':''}" onclick="state.invFilter='${k}';render()">${l}</span>`).join('')}</div>
     <button class="btn" style="margin-bottom:10px" onclick="exportInvoicesCSV()">Export CSV</button><div id="invList"></div>`;
 }
@@ -1706,6 +1834,247 @@ async function exportInvoicesCSV(){
   const rows = (await dbAll('invoices')).sort((a,b)=>a.date-b.date).map(i=>({ invoice:i.number, date:new Date(i.date).toISOString(), customer:i.customerName, mobile:i.customerMobile||'', session:i.sessionCode||'',
     gaming:i.gamingAmount||0, accompanying:i.accompanyAmount||0, overtime:i.overtimeAmount||0, food:i.foodAmount||0, other:i.otherAmount||0, subtotal:i.subtotal, discount:i.discount||0, tax:i.tax||0, total:i.grandTotal, paid:invoicePaid(i), balance:invoiceBalance(i), payments:i.paymentMethod||'' }));
   downloadCSV('LVL-invoices.csv', rows);
+}
+
+/* ============ Admin: invoice management & deletion ============ */
+/* Deleting an invoice is a SOFT delete by default: a complete copy moves to the 'deletedInvoices' store (restorable) and every
+   linked record is adjusted consistently (account balances, customer totals, stock, the gaming session, daily totals).
+   Every delete / restore / permanent delete is written to the 'auditLog' store, which is never removed. All permission checks
+   live in the core functions below (admAuthorize), not only in the buttons that call them. */
+async function dbAllFresh(store){ const f=fb(); const snap=await f.getDocs(f.collection(f.db, store)); return snap.docs.map(d=>d.data()); }   // whole collection, not just the 120-day window
+async function admAuthorize(pin){
+  if(!isAdmin()) throw new Error('Only an administrator can delete or restore invoices. Switch to Admin mode in Settings → Staff Permissions.');
+  const st = (await dbGet('settings','main')) || state.settings || {};
+  if(st.adminPinHash && (await hashPin(String(pin||'').trim()))!==st.adminPinHash) throw new Error('Wrong Admin PIN.');
+}
+function invPayTotals(inv){   // net money per payment method (refunds are negative)
+  if(!inv.payments){ return PAY_TO_ACCOUNT[inv.paymentMethod] && inv.grandTotal>0 ? [{ method:inv.paymentMethod, amount:inv.grandTotal }] : []; }
+  const m={}; inv.payments.forEach(p=>{ m[p.method]=(m[p.method]||0)+(Number(p.amount)||0); });
+  return Object.entries(m).filter(([k,v])=>v!==0).map(([method,amount])=>({ method, amount }));
+}
+async function admAdjustDaily(inv, sign){   // incremental, so invoices older than the 120-day window are handled correctly too
+  const date = dateKey(inv.date); const r = (await dbGet('dailyRecords', date)) || { date, sales:0, expenses:0, gamingRev:0, foodRev:0, invoiceCount:0, expenseCount:0 };
+  r.sales = (r.sales||0) + sign*inv.grandTotal;
+  r.gamingRev = (r.gamingRev||0) + sign*((inv.gamingAmount||0)+(inv.accompanyAmount||0)+(inv.overtimeAmount||0));
+  r.foodRev = (r.foodRev||0) + sign*(inv.foodAmount||0);
+  r.invoiceCount = Math.max(0,(r.invoiceCount||0)+sign); r.net = r.sales-(r.expenses||0); r.updatedAt = Date.now();
+  await dbPut('dailyRecords', r);
+}
+async function admAdjustCustomer(inv, sign){
+  const mob = inv.customerMobile; if(!mob) return false;
+  const c = await dbGet('customers', mob); if(!c) return false;
+  const gl = (inv.lines||[]).filter(l=>l.kind==='gaming'); const g = (inv.gamingAmount||0)+(inv.accompanyAmount||0)+(inv.overtimeAmount||0);
+  c.visits = Math.max(0,(c.visits||0)+sign); c.gamingSessions = Math.max(0,(c.gamingSessions||0)+sign*gl.length);
+  c.gamingHours = Math.max(0,(c.gamingHours||0)+sign*(inv.durationMins||0)/60); c.gamingSpend = Math.max(0,(c.gamingSpend||0)+sign*g);
+  c.foodSpend = Math.max(0,(c.foodSpend||0)+sign*(inv.foodAmount||0)); c.totalSpend = Math.max(0,(c.totalSpend||0)+sign*inv.grandTotal);
+  c.invoiceIds = (c.invoiceIds||[]).filter(x=>x!==inv.id); if(sign>0) c.invoiceIds.push(inv.id);
+  await dbPut('customers', c); return true;
+}
+async function admStockMove(inv, sign){   // sign +1: return sold items to stock · -1: take them out again (restore)
+  let n = 0;
+  const move = async(p, qty)=>{ if(!p || !isTracked(p)) return; const fresh = await dbGet('products', p.id); fresh.stock = Math.max(0, fresh.stock + sign*qty); await dbPut('products', fresh); await dbLogInv(fresh, sign*qty, sign>0?'invoice deleted':'invoice restored', inv.number); n++; };
+  const prods = await dbAll('products');
+  for(const l of inv.lines||[]){
+    if(l.kind==='item' && l.itemId) await move(prods.find(x=>x.id===l.itemId), l.qty);
+  }
+  for(const l of inv.lines||[]){ for(const b of (l.included||[])) await move(prods.find(x=>x.name===b && isTracked(x)), 1); }
+  return n;
+}
+async function admAudit(action, inv, extra){
+  try{ await createRecord('auditLog', Object.assign({ ts:Date.now(), action, invoiceId:inv.id, number:inv.number, amount:inv.grandTotal, customerName:inv.customerName||'', by:isAdmin()?'Admin':'Staff' }, extra||{})); }
+  catch(e){ console.error('audit log failed', e); }
+}
+
+/* Soft delete. Options: reason, reverseAccounts, returnStock, sessionMode ('reopen' | 'cancel'), pin. */
+async function deleteInvoiceCore(id, o){
+  o = o||{}; await admAuthorize(o.pin);
+  const inv = await dbGet('invoices', id); if(!inv) throw new Error('Invoice not found — it may already have been deleted.');
+  const paid = invoicePaid(inv); const reason = (o.reason||'').trim();
+  if(paid>0 && !reason) throw new Error(`${inv.number} has payments recorded. Enter a reason for deleting it.`);
+  const rec = { id:inv.id, number:inv.number, amount:inv.grandTotal, paidAtDelete:paid, customerName:inv.customerName||'', customerMobile:inv.customerMobile||'', invoiceDate:inv.date, deletedAt:Date.now(), deletedBy:'Admin', reason, actions:{ accountsReversed:[], stockReturned:0, customerAdjusted:false, session:null }, warnings:[], invoice:inv };
+  await dbPut('deletedInvoices', rec);   // archive FIRST — if this fails nothing else has been touched
+  const actions = rec.actions, warnings = rec.warnings;   // dbPut deep-copies nested objects onto rec, so track changes on THESE
+  const step = async(label, fn)=>{ try{ await fn(); }catch(e){ console.error('delete step failed:', label, e); warnings.push(label+': '+(e&&e.message?e.message:e)); } };
+  if(o.reverseAccounts!==false) await step('account balances', async()=>{ for(const p of invPayTotals(inv)){ if(p.amount>0) await debitAccount(p.method, p.amount); else await creditAccount(p.method, -p.amount); actions.accountsReversed.push(p); } });
+  await step('customer totals', async()=>{ actions.customerAdjusted = await admAdjustCustomer(inv, -1); });
+  if(o.returnStock!==false) await step('stock', async()=>{ actions.stockReturned = await admStockMove(inv, +1); });
+  await step('gaming session', async()=>{
+    if(!inv.sessionId) return; const s = await dbGet('bsessions', inv.sessionId); if(!s || s.invoiceId!==inv.id) return;
+    const mode = o.sessionMode==='cancel' ? 'cancel' : 'reopen';
+    await dbUpdate('bsessions', inv.sessionId, d=>{
+      d.invoiceId = null; d.deletedInvoiceNumber = inv.number; d.updatedAt = Date.now(); delete d.invoiceNumber; delete d.finalizedAt;
+      if(mode==='reopen'){ d.status = 'ready'; } else { d.status = 'cancelled'; d.cancelReason = `Invoice ${inv.number} deleted by Admin`; d.cancelledAt = Date.now(); }
+      return true; });
+    updateLiveCache(await dbGet('bsessions', inv.sessionId)); actions.session = { id:s.id, mode, prevStatus:s.status };
+  });
+  await step('daily totals', async()=>{ await admAdjustDaily(inv, -1); });
+  await dbDel('invoices', id);
+  await dbPut('deletedInvoices', rec);   // final copy including what was adjusted
+  await admAudit('invoice_delete', inv, { reason, paid, actions, warnings });
+  return rec;
+}
+/* Restore a soft-deleted invoice with its original number, undoing the adjustments made when it was deleted. */
+async function restoreInvoiceCore(id, o){
+  o = o||{}; await admAuthorize(o.pin);
+  const rec = await dbGet('deletedInvoices', id); if(!rec) throw new Error('Deleted invoice not found.');
+  const inv = rec.invoice; const a = rec.actions||{};
+  if(await dbGet('invoices', id)) throw new Error(`${inv.number} already exists.`);
+  let sess = null;
+  if(inv.sessionId){
+    sess = await dbGet('bsessions', inv.sessionId);
+    if(sess && sess.invoiceId && sess.invoiceId!==inv.id) throw new Error(`The gaming session ${sesCode(sess)} has since been billed on another invoice, so ${inv.number} can't be restored.`);
+    if(sess && ['active','hold'].includes(sess.status)) throw new Error(`The gaming session ${sesCode(sess)} was reopened and is in use. Finish or cancel it first, then restore.`);
+  }
+  await dbPut('invoices', inv);
+  const warnings = []; const step = async(label, fn)=>{ try{ await fn(); }catch(e){ console.error('restore step failed:', label, e); warnings.push(label+': '+(e&&e.message?e.message:e)); } };
+  await step('account balances', async()=>{ for(const p of (a.accountsReversed||[])){ if(p.amount>0) await creditAccount(p.method, p.amount); else await debitAccount(p.method, -p.amount); } });
+  await step('customer totals', async()=>{ if(a.customerAdjusted) await admAdjustCustomer(inv, +1); });
+  await step('stock', async()=>{ if(a.stockReturned) await admStockMove(inv, -1); });
+  await step('gaming session', async()=>{
+    if(!sess) return;
+    await dbUpdate('bsessions', inv.sessionId, d=>{ d.invoiceId = inv.id; d.invoiceNumber = inv.number; d.finalizedAt = inv.date; d.status = invoiceBalance(inv)<=0 ? 'paid' : 'finalized'; delete d.deletedInvoiceNumber; delete d.cancelReason; delete d.cancelledAt; d.updatedAt = Date.now(); return true; });
+    updateLiveCache(await dbGet('bsessions', inv.sessionId));
+  });
+  await step('daily totals', async()=>{ await admAdjustDaily(inv, +1); });
+  await dbDel('deletedInvoices', id);
+  await admAudit('invoice_restore', inv, { warnings });
+  return inv;
+}
+/* Permanent deletion — only from the Deleted tab. Removes the archived copy and the stock movements it created; the audit log entry stays. */
+async function purgeInvoiceCore(id, o){
+  o = o||{}; await admAuthorize(o.pin);
+  const rec = await dbGet('deletedInvoices', id); if(!rec) throw new Error('Deleted invoice not found.');
+  if((rec.actions||{}).stockReturned){   // stock was returned and the invoice is gone for good: drop its now-meaningless movements
+    for(const t of await dbAllFresh('inventoryTx')) if(t.ref===rec.number) await dbDel('inventoryTx', t.id);
+  }
+  await dbDel('deletedInvoices', id);
+  const inv = rec.invoice||{};
+  await admAudit('invoice_purge', { id:rec.id, number:rec.number, grandTotal:rec.amount, customerName:rec.customerName }, { reason:(o.reason||rec.reason||''), paid:rec.paidAtDelete, lines:(inv.lines||[]).length, invoiceDate:rec.invoiceDate, deletedAt:rec.deletedAt });
+}
+
+/* ---- Admin screen ---- */
+let __admInv = [], __admDel = [], __admLog = [], __admStale = true;
+function openAdminInvoices(){ if(!isAdmin()){ tell('Invoice management is for administrators only.'); return; } __admStale = true; go('adminInvoices'); }
+async function screenAdminInvoices(){
+  if(!isAdmin()) return `<h2>Invoice Management</h2><div class="card" style="border-color:var(--amber)"><b>Admin only</b><p class="muted" style="font-size:13px;margin:6px 0">Switch to Admin mode in Settings → Staff Permissions to manage or delete invoices.</p></div>`;
+  const A = state.adm;
+  if(__admStale){
+    const [inv, del, log] = await Promise.all([dbAllFresh('invoices'), dbAllFresh('deletedInvoices'), dbAllFresh('auditLog')]);
+    __admInv = inv.sort((a,b)=>b.date-a.date); __admDel = del.sort((a,b)=>b.deletedAt-a.deletedAt); __admLog = log.sort((a,b)=>b.ts-a.ts); __admStale = false;
+  }
+  setTimeout(admFilter,0);
+  const tabs = [['active',`Invoices (${__admInv.length})`],['deleted',`Deleted (${__admDel.length})`]].map(([k,l])=>`<span class="chip ${A.tab===k?'sel':''}" onclick="state.adm.tab='${k}';state.adm.sel={};render()">${l}</span>`).join('');
+  const filters = A.tab==='active' ? `<div class="card" style="padding:10px">
+      <input id="admQ" placeholder="Invoice no., customer name or mobile" value="${esc(A.q)}" oninput="state.adm.q=this.value;admFilter()">
+      <div class="grid2"><div><label>From</label><input type="date" value="${esc(A.from)}" onchange="state.adm.from=this.value;admFilter()"></div><div><label>To</label><input type="date" value="${esc(A.to)}" onchange="state.adm.to=this.value;admFilter()"></div></div>
+      <div class="grid2"><div><label>Status</label><select onchange="state.adm.status=this.value;admFilter()">${[['all','All'],['paid','Paid'],['due','Balance due']].map(([k,l])=>`<option value="${k}" ${A.status===k?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div><label>Payment method</label><select onchange="state.adm.method=this.value;admFilter()">${[['all','All'],...PAY_METHODS.map(m=>[m,m]),['none','Unpaid']].map(([k,l])=>`<option value="${k}" ${A.method===k?'selected':''}>${l}</option>`).join('')}</select></div></div>
+    </div>` : `<input id="admQ" placeholder="Search deleted invoices" value="${esc(A.q)}" oninput="state.adm.q=this.value;admFilter()" style="margin-bottom:8px">`;
+  return `<h2>Invoice Management <span class="pill neon">Admin</span></h2>
+    <div style="margin-bottom:6px">${tabs}</div>${filters}
+    <div id="admBulk" class="adm-bulk"></div><div id="admList"></div>`;
+}
+function admMatch(i){
+  const A = state.adm, q = A.q.trim().toLowerCase();
+  if(q && !((i.number+' '+(i.customerName||'')+' '+(i.customerMobile||'')).toLowerCase().includes(q))) return false;
+  const dk = dateKey(i.date); if(A.from && dk<A.from) return false; if(A.to && dk>A.to) return false;
+  const bal = invoiceBalance(i); if(A.status==='paid' && bal>0) return false; if(A.status==='due' && bal<=0) return false;
+  if(A.method!=='all'){
+    const pays = (i.payments||[]).filter(p=>p.amount>0);
+    if(A.method==='none'){ if(pays.length || (!i.payments && i.paymentMethod && i.paymentMethod!=='Unpaid')) return false; }
+    else if(!(pays.some(p=>p.method===A.method) || (!i.payments && String(i.paymentMethod||'').includes(A.method)))) return false;
+  }
+  return true;
+}
+function admFilter(){
+  const A = state.adm, list = document.getElementById('admList'), bulk = document.getElementById('admBulk'); if(!list) return;
+  if(A.tab==='deleted'){
+    const q = A.q.trim().toLowerCase();
+    const rows = __admDel.filter(r=>!q || (r.number+' '+r.customerName+' '+r.customerMobile).toLowerCase().includes(q));
+    bulk.innerHTML = '';
+    list.innerHTML = (rows.length ? rows.map(r=>`<div class="card"><div class="list-item"><div style="min-width:0"><b>${esc(r.number)}</b> <span class="pill red">Deleted</span><br><span class="muted" style="font-size:12px">${esc(r.customerName||'')} · invoice ${new Date(r.invoiceDate).toLocaleDateString('en-IN')}<br>Deleted ${new Date(r.deletedAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})} by ${esc(r.deletedBy||'Admin')}${r.reason?' · “'+esc(r.reason)+'”':''}</span></div><div style="text-align:right"><b>${fmt(r.amount)}</b></div></div>
+      <div class="grid2" style="margin-top:6px"><button class="btn sm" onclick="adminRestoreModal(${r.id})">Restore</button><button class="btn sm danger" onclick="adminPurgeModal(${r.id})">Delete forever</button></div></div>`).join('') : '<div class="empty">No deleted invoices.</div>')
+      + `<div class="section-title">Deletion history (audit log)</div>` + (__admLog.length ? `<div class="card">${__admLog.slice(0,100).map(l=>`<div class="list-item"><span style="min-width:0"><b>${esc(l.number||'')}</b> · ${l.action==='invoice_delete'?'Deleted':l.action==='invoice_restore'?'Restored':'Permanently deleted'}<br><span class="muted" style="font-size:11px">${new Date(l.ts).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})} · ${esc(l.by||'')}${l.reason?' · '+esc(l.reason):''}</span></span><span>${fmt(l.amount||0)}</span></div>`).join('')}</div>` : '<div class="muted" style="font-size:12px">Nothing yet.</div>');
+    return;
+  }
+  const rows = __admInv.filter(admMatch), shown = rows.slice(0,200);
+  const nSel = Object.keys(A.sel).length;
+  bulk.innerHTML = `<div class="row" style="gap:8px;align-items:center"><button class="btn sm" style="flex:1" onclick="admSelectAll()">${shown.length && shown.every(i=>A.sel[i.id])?'Clear selection':'Select all shown ('+shown.length+')'}</button><button class="btn sm danger" style="flex:1" ${nSel?'':'disabled'} onclick="adminDeleteModal(Object.keys(state.adm.sel).map(Number))">Delete selected (${nSel})</button></div>`;
+  list.innerHTML = shown.length ? shown.map(i=>`<div class="card adm-row"><div class="list-item"><label class="adm-chk" aria-label="Select ${esc(i.number)}"><input type="checkbox" ${A.sel[i.id]?'checked':''} onchange="admToggle(${i.id},this.checked)"></label>
+      <div class="adm-main" role="button" tabindex="0" onclick="openInvoice(${i.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openInvoice(${i.id})}"><b>${esc(i.number)}</b> ${invoiceStatusPill(i)}<br><span class="muted" style="font-size:12px">${esc(i.customerName||'')}${i.customerMobile?' · '+esc(i.customerMobile):''} · ${new Date(i.date).toLocaleDateString('en-IN')}${i.paymentMethod?' · '+esc(i.paymentMethod):''}</span></div>
+      <div style="text-align:right"><b>${fmt(i.grandTotal)}</b><br><button class="btn sm danger" style="margin-top:4px" onclick="adminDeleteModal([${i.id}])">Delete</button></div></div></div>`).join('') + (rows.length>shown.length?`<div class="muted" style="font-size:12px;text-align:center">Showing the first ${shown.length} of ${rows.length} — narrow the filters.</div>`:'') : '<div class="empty">No invoices match.</div>';
+}
+function admToggle(id, on){ if(on) state.adm.sel[id]=true; else delete state.adm.sel[id]; admFilter(); }
+function admSelectAll(){
+  const A = state.adm, shown = __admInv.filter(admMatch).slice(0,200);
+  if(shown.length && shown.every(i=>A.sel[i.id])) A.sel = {}; else shown.forEach(i=>{ A.sel[i.id]=true; });
+  admFilter();
+}
+function admPinField(hasPin){ return hasPin ? `<label>Admin PIN (required)</label><input id="adPin" type="password" inputmode="numeric" autocomplete="off" placeholder="Admin PIN">` : `<div class="muted" style="font-size:11px;margin-top:8px">No Admin PIN is set. Set one in Settings → Staff Permissions so deleting invoices needs the PIN.</div>`; }
+async function adminDeleteModal(ids){
+  if(!isAdmin()){ tell('Only an administrator can delete invoices.'); return; }
+  ids = ids.filter(x=>x!==undefined && x!==null); if(!ids.length) return;
+  const invs = []; for(const id of ids){ const i = await dbGet('invoices', id); if(i) invs.push(i); }
+  if(!invs.length){ tell('Those invoices no longer exist.'); return; }
+  const st = (await dbGet('settings','main')) || state.settings || {};
+  const total = invs.reduce((a,i)=>a+i.grandTotal,0), paid = invs.reduce((a,i)=>a+Math.max(0,invoicePaid(i)),0);
+  const hasSession = invs.some(i=>i.sessionId), many = invs.length>1;
+  window.__admDelIds = invs.map(i=>i.id); window.__admNeedType = paid>0 || many; window.__admNeedReason = paid>0;
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3 style="color:var(--red)">Delete ${many?invs.length+' invoices':'invoice '+esc(invs[0].number)}?</h3>
+    <div class="card" style="background:var(--panel2);padding:10px">${invs.slice(0,6).map(i=>`<div class="list-item"><span><b>${esc(i.number)}</b><br><span class="muted" style="font-size:12px">${esc(i.customerName||'')}</span></span><b>${fmt(i.grandTotal)}</b></div>`).join('')}${invs.length>6?`<div class="muted" style="font-size:12px">+ ${invs.length-6} more</div>`:''}
+      <div class="list-item"><span>Total amount</span><b>${fmt(total)}</b></div>${paid>0?`<div class="list-item"><span style="color:var(--amber)">Payments recorded</span><b style="color:var(--amber)">${fmt(paid)}</b></div>`:''}</div>
+    <p class="muted" style="font-size:12px;margin:6px 0">What happens: the invoice${many?'s are':' is'} removed from invoice lists, the dashboard, reports, outstanding balances and customer history. A full copy is kept under <b>Deleted</b> so it can be restored, and the deletion is recorded in the audit log. No other invoice or transaction is changed.</p>
+    <label style="display:flex;gap:8px;align-items:center;margin:8px 0"><input id="adAcc" type="checkbox" checked> Reverse the payments from Cash / UPI / Bank balances</label>
+    <label style="display:flex;gap:8px;align-items:center;margin:8px 0"><input id="adStock" type="checkbox" checked> Return sold items to stock</label>
+    ${hasSession?`<label>Linked gaming session</label><select id="adSess"><option value="reopen">Reopen it so it can be billed again</option><option value="cancel">Keep it as a cancelled record</option></select>`:'<input id="adSess" type="hidden" value="reopen">'}
+    <label>Reason ${paid>0?'(required — this invoice has payments)':'(optional)'}</label><input id="adReason" placeholder="e.g. duplicate invoice, entered by mistake">
+    <label style="display:flex;gap:8px;align-items:center;margin:10px 0 4px;color:var(--red)"><input id="adPerm" type="checkbox"> Delete permanently — it can't be restored</label>
+    ${window.__admNeedType?`<label>Type DELETE to confirm</label><input id="adType" autocomplete="off" autocapitalize="characters" placeholder="DELETE">`:''}
+    ${admPinField(!!st.adminPinHash)}
+    <div class="grid2" style="margin-top:12px"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn danger" id="adGo" onclick="confirmAdminDelete()">Delete ${many?invs.length+' invoices':'invoice'}</button></div>`);
+}
+async function confirmAdminDelete(){
+  const g = id=>document.getElementById(id), ids = window.__admDelIds||[];
+  const o = { pin:g('adPin')?g('adPin').value:'', reason:g('adReason').value, reverseAccounts:g('adAcc').checked, returnStock:g('adStock').checked, sessionMode:g('adSess').value, permanent:g('adPerm').checked };
+  if(window.__admNeedType || o.permanent){ if(!g('adType') || g('adType').value.trim().toUpperCase()!=='DELETE'){ tell('Type DELETE in the box to confirm.'); return; } }
+  if(window.__admNeedReason && !o.reason.trim()){ tell('Enter a reason — these invoices have payments recorded, and the reason is kept in the audit log.'); return; }
+  try{ await admAuthorize(o.pin); }catch(e){ tell(e.message); return; }
+  const btn = g('adGo'); if(btn){ btn.disabled = true; btn.textContent = 'Deleting…'; }
+  let done = 0; const fails = [];
+  for(const id of ids){
+    try{ await deleteInvoiceCore(id, o); if(o.permanent) await purgeInvoiceCore(id, { pin:o.pin, reason:o.reason }); done++; }
+    catch(e){ fails.push(e && e.message ? e.message : String(e)); }
+  }
+  closeModal(); state.adm.sel = {}; __admStale = true;
+  if(state.screen==='invoiceView' && done) await goBack('invoices'); else await render();
+  if(done) showToast(`${done} invoice${done>1?'s':''} ${o.permanent?'permanently deleted':'deleted'}`);
+  if(fails.length) tell(fails.join('\n'));
+}
+function adminRestoreModal(id){
+  if(!isAdmin()){ tell('Only an administrator can restore invoices.'); return; }
+  const r = __admDel.find(x=>x.id===id); if(!r) return;
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Restore ${esc(r.number)}?</h3>
+    <p class="muted" style="font-size:13px">${fmt(r.amount)} · ${esc(r.customerName||'')}. The invoice returns with its original number and the changes made when it was deleted (account balances, stock, customer totals, linked session) are re-applied.</p>
+    ${admPinField(!!(state.settings||{}).adminPinHash)}
+    <div class="grid2" style="margin-top:12px"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="confirmAdminRestore(${id})">Restore invoice</button></div>`);
+}
+async function confirmAdminRestore(id){
+  try{ const p = document.getElementById('adPin'); await restoreInvoiceCore(id, { pin:p?p.value:'' }); closeModal(); __admStale = true; await render(); showToast('Invoice restored'); }
+  catch(e){ tell(e && e.message ? e.message : String(e)); }
+}
+function adminPurgeModal(id){
+  if(!isAdmin()){ tell('Only an administrator can permanently delete invoices.'); return; }
+  const r = __admDel.find(x=>x.id===id); if(!r) return;
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3 style="color:var(--red)">Delete ${esc(r.number)} forever?</h3>
+    <p class="muted" style="font-size:13px">The saved copy of this invoice (${fmt(r.amount)}, ${esc(r.customerName||'')}) is erased and can never be restored. The audit-log entry of the deletion is kept.</p>
+    <label>Type DELETE to confirm</label><input id="adType" autocomplete="off" autocapitalize="characters" placeholder="DELETE">
+    ${admPinField(!!(state.settings||{}).adminPinHash)}
+    <div class="grid2" style="margin-top:12px"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn danger" onclick="confirmAdminPurge(${id})">Delete forever</button></div>`);
+}
+async function confirmAdminPurge(id){
+  if(document.getElementById('adType').value.trim().toUpperCase()!=='DELETE'){ tell('Type DELETE in the box to confirm.'); return; }
+  try{ const p = document.getElementById('adPin'); await purgeInvoiceCore(id, { pin:p?p.value:'' }); closeModal(); __admStale = true; await render(); showToast('Permanently deleted'); }
+  catch(e){ tell(e && e.message ? e.message : String(e)); }
 }
 
 /* ============ Inventory ============ */
@@ -1756,12 +2125,12 @@ function filterCustomers(q){
   const el = document.getElementById('custList');
   if(el) el.innerHTML = custListHtml(filtered);
 }
-function openCustomer(mobile){ state.custProfile = mobile; state.screen='customerProfile'; render(); }
+function openCustomer(mobile){ state.custProfile = mobile; go('customerProfile'); }
 async function screenCustomerProfile(){
   const c = await dbGet('customers', state.custProfile);
   if(!c) return `<div class="empty">Customer not found.</div>`;
   const invoices = []; for(const id of c.invoiceIds){ const inv = await dbGet('invoices', id); if(inv) invoices.push(inv); }
-  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('customers')">← Back</button>
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('customers')">← Back</button>
   <h2>${c.name}</h2>
   <div class="card"><div class="grid2">
       <div class="stat"><div class="v">${c.visits}</div><div class="l">Visits</div></div>
@@ -1780,7 +2149,7 @@ async function screenExpenses(){
   const all = await dbAll('expenses');
   const templates = all.filter(e=>e.isTemplate);
   const logged = all.filter(e=>!e.isTemplate).sort((a,b)=>b.date-a.date);
-  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('more')">← Back</button>
   <h2>Expenses</h2>
   <div class="card">
     <label>Category</label>
@@ -1830,7 +2199,7 @@ async function logRecurring(templateId){
 async function screenVendors(){
   const vendors = await dbAll('vendors');
   const purchases = await dbAll('purchases');
-  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('more')">← Back</button>
   <h2>Vendors</h2>
   <div class="card">
     <label>Vendor Name</label><input id="vName" placeholder="Vendor name">
@@ -1854,11 +2223,11 @@ async function addVendor(){
   await dbPut('vendors', { name, phone:document.getElementById('vPhone').value, email:document.getElementById('vEmail').value, address:document.getElementById('vAddr').value, gstin:document.getElementById('vGstin').value });
   render();
 }
-function openVendor(id){ state.vendorId=id; state.screen='vendorProfile'; render(); }
+function openVendor(id){ state.vendorId=id; go('vendorProfile'); }
 async function screenVendorProfile(){
   const v = await dbGet('vendors', state.vendorId);
   const purchases = (await dbAll('purchases')).filter(p=>p.vendorId===v.id);
-  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('vendors')">← Back</button>
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('vendors')">← Back</button>
   <h2>${v.name}</h2><div class="card muted">${v.phone} · ${v.email}<br>${v.address}<br>${v.gstin?'GSTIN: '+v.gstin:''}</div>
   <div class="section-title">Purchase History</div>
   ${purchases.length? purchases.map(p=>`<div class="list-item"><span>${p.invoiceNo}<br><span class="muted">${new Date(p.date).toLocaleDateString('en-IN')}</span></span><span>${fmt(p.total)} <span class="pill ${p.paymentStatus==='Paid'?'green':'red'}">${p.paymentStatus}</span></span></div>`).join('') : '<div class="muted">No purchases.</div>'}`;
@@ -1869,7 +2238,7 @@ let purchaseCart = [];
 async function screenPurchases(){
   const purchases = (await dbAll('purchases')).sort((a,b)=>b.date-a.date);
   const vendors = await dbAll('vendors');
-  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('more')">← Back</button>
   <h2>Purchases</h2>
   <div class="card">
     <label>Vendor</label><select id="pVendor">${vendors.length?vendors.map(v=>`<option value="${v.id}">${v.name}</option>`).join(''):'<option value="">Add a vendor first</option>'}</select>
@@ -1924,7 +2293,7 @@ async function savePurchase(){
 /* ============ Employees ============ */
 async function screenEmployees(){
   const emps = await dbAll('employees');
-  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('more')">← Back</button>
   <h2>Employees</h2>
   <div class="card">
     <label>Name</label><input id="eName"><label>Phone</label><input id="ePhone">
@@ -1941,11 +2310,11 @@ async function addEmployee(){
   await dbPut('employees', { name, phone:document.getElementById('ePhone').value, role:document.getElementById('eRole').value, joining:document.getElementById('eJoin').value, salary:Number(document.getElementById('eSalary').value)||0, status:document.getElementById('eStatus').value });
   render();
 }
-function openEmployee(id){ state.empId=id; state.screen='employeeProfile'; render(); }
+function openEmployee(id){ state.empId=id; go('employeeProfile'); }
 async function screenEmployeeProfile(){
   const e = await dbGet('employees', state.empId);
   const txs = (await dbAll('employeeTx')).filter(t=>t.employeeId===e.id).sort((a,b)=>b.date-a.date);
-  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('employees')">← Back</button>
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('employees')">← Back</button>
   <h2>${e.name}</h2><div class="card muted">${e.role} · ${e.phone}<br>Salary: ${fmt(e.salary)}/mo</div>
   <div class="card">
     <label>Type</label><select id="txType"><option>Salary Payment</option><option>Advance</option></select>
@@ -1969,7 +2338,7 @@ async function addEmpTx(employeeId){
 async function screenCashBank(){
   const accounts = await dbAll('accounts');
   const total = accounts.reduce((s,a)=>s+a.balance,0);
-  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('more')">← Back</button>
   <h2>Cash & Bank</h2>
   <div class="card"><div class="stat"><div class="v">${fmt(total)}</div><div class="l">Total Balance</div></div></div>
   ${accounts.map(a=>`<div class="card"><div class="list-item"><span>${a.name}</span><span style="font-weight:700">${fmt(a.balance)}</span></div></div>`).join('')}
@@ -2101,6 +2470,7 @@ function screenMore(){
     <div class="list-item" onclick="go('reports')"><span>Reports</span><span>›</span></div>
     <div class="list-item" onclick="go('settings')"><span>Settings</span><span>›</span></div>
     <div class="list-item" onclick="go('backup')"><span>Backup & Restore</span><span>›</span></div>
+    ${isAdmin()?`<div class="list-item" onclick="openAdminInvoices()"><span>Admin: Invoice Management</span><span>›</span></div>`:''}
   </div>
   <button class="btn" onclick="loadDemoData()">Load Demo Data</button>
   <button class="btn" style="margin-top:10px" onclick="triggerInstall()">Install App on This Phone</button>
@@ -2116,9 +2486,9 @@ async function saveSettingsPatch(patch){ if(!needAdmin()) return false; await pa
 const SET_PAGES = [['set_items','','Items Catalogue','Food, drinks, combos, merchandise, charges'],['set_stations','','Gaming Setups & Variants','Variants per player count, order, gaming PCs'],['set_physical','','Physical Stations','Actual consoles / PCs on the floor'],['set_pricing','','Gaming Pricing','Hourly & 30-minute rates per setup'],
   ['set_custom','','Custom Duration Rules','Allow 15/45-minute etc.'],['set_overtime','','Overtime Pricing','Price and charging unit'],['set_accompany','','Accompanying-Person Pricing','Per person per hour'],
   ['set_tax','','Taxes','GST / tax settings'],['set_invoice','','Invoice Numbering','Prefixes, next number, terms'],['set_business','','Business Details','Name, address, GSTIN'],['set_perm','','Staff Permissions','Admin / Staff mode'],['backup','','Backup & Restore','Backups, restore, clear data']];
-function setBack(title){ return `<button class="btn ghost sm" style="margin-bottom:8px" onclick="go('settings')">← Settings</button><h2>${title}</h2>${isAdmin()?'':'<div class="card" style="border-color:var(--amber);padding:8px"><span class="muted" style="font-size:12px">Staff mode — changes here need Admin permission.</span></div>'}`; }
+function setBack(title){ return `<button class="btn ghost sm" style="margin-bottom:8px" onclick="goBack('settings')">← Settings</button><h2>${title}</h2>${isAdmin()?'':'<div class="card" style="border-color:var(--amber);padding:8px"><span class="muted" style="font-size:12px">Staff mode — changes here need Admin permission.</span></div>'}`; }
 function screenSettings(){
-  return `<button class="btn ghost sm" style="margin-bottom:8px" onclick="go('more')">← More</button><h2>Settings</h2>
+  return `<button class="btn ghost sm" style="margin-bottom:8px" onclick="goBack('more')">← More</button><h2>Settings</h2>
     <div class="muted" style="font-size:12px;margin-bottom:8px">Mode: <b>${isAdmin()?'Admin':'Staff'}</b></div>
     <div class="card">${SET_PAGES.map(([id,ic,t,d])=>`<div class="list-item" style="cursor:pointer" onclick="go('${id}')"><span>${ic} <b>${t}</b><br><span class="muted" style="font-size:12px">${d}</span></span><span>›</span></div>`).join('')}</div>`;
 }
@@ -2376,7 +2746,7 @@ async function clearPin(){ if(!needAdmin()) return; await patchSettings({adminPi
 
 /* ============ Backup & Restore ============ */
 function screenBackup(){
-  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="go('more')">← Back</button>
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('more')">← Back</button>
   <h2>Backup & Restore</h2>
   <div class="card">
     <button class="btn primary" onclick="doBackup()">Backup Data</button>

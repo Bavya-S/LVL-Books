@@ -200,3 +200,24 @@ Open it on a phone and run a couple of test bills before relying on it.
 **Known limits:** the Firestore build keeps the last 120 days of invoices/sessions loaded (older invoices open on demand;
 daily totals are kept forever). Phones that are offline create unique but non-sequential session numbers. WhatsApp can't
 be sent automatically. The Admin PIN is a convenience lock per device.
+
+## What's new in this version
+
+**Active Gaming Session cards (Dashboard + Sessions tab)**
+- The whole card is one tap target (tap the ID, setup details, amount or empty space) and opens that session by its unique ID. It is a real `<button>` stretched over the card, so it is keyboard accessible (Tab, then Enter or Space), has a pointer cursor, an `aria-label`, and a pressed highlight.
+- Pause/Resume, Add Item, Edit Bill, End Gaming, Checkout and Cancel Session sit above it and run on their own without opening the session.
+- Cards now show the gaming setups and total billed gaming time.
+
+**Android navigation**
+- Back button / gesture: closes a dialog or sheet first, then goes back one screen. Picker and Checkout return to the session bill, session detail returns to the Dashboard with the list scroll position restored, and Settings sub-pages return one level at a time.
+- Back on the Dashboard shows an "Exit LVL Books?" confirmation.
+- Top bar: back arrow on nested screens and a Home button for the Dashboard on every non-Dashboard screen.
+- Unsaved picker selections ask before being discarded; session header edits are saved on leaving; checkout input is kept when you step back to the bill. Gaming sessions are stored in the database and are never discarded by navigating.
+- Predictive-back animation is controlled by Android/Chrome. The app handles the back event it sends. In a Capacitor wrapper the `backButton` event is wired too.
+
+**Admin: invoice management** (More → Admin: Invoice Management, Admin mode only)
+- Search by number, name or mobile; filter by date, status and payment method; open details; delete one or many.
+- Delete = soft delete. A copy goes to the Deleted tab (restorable). The delete dialog shows number and amount and explains the consequences. Paid invoices, bulk deletes and permanent deletes need a typed DELETE. A reason is required when payments exist. The Admin PIN is required if one is set.
+- Account balances, customer totals, stock, the linked gaming session (reopened for re-billing, or kept as cancelled) and daily totals are all adjusted. Dashboard and reports update. Restore re-applies everything. Permanent delete erases the archive and its stock movements; the audit log entry is always kept.
+- Permission checks are enforced inside the delete/restore functions, not only by hiding buttons. As with the existing PIN, this is a device-level lock, not server-side security. The Firestore rules still allow any signed-in app instance.
+- New Firestore collections `deletedInvoices` and `auditLog` need no rule changes. They are included in backups.
