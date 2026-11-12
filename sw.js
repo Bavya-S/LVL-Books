@@ -1,4 +1,5 @@
-const CACHE_NAME = 'lvl-books-v6';
+const CACHE_NAME = 'lvl-books-v7';
+const SDK_CACHE = 'lvl-books-sdk-v1';   // Firebase libraries, cached after the first online visit so the app also opens cold with no signal
 const APP_SHELL = [
   './',
   './index.html',
@@ -19,7 +20,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((names) =>
-      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+      Promise.all(names.filter((n) => n !== CACHE_NAME && n !== SDK_CACHE).map((n) => caches.delete(n)))
     )
   );
   self.clients.claim();
@@ -27,11 +28,19 @@ self.addEventListener('activate', (event) => {
 
 // Cache-first for the app shell; falls back to network, then to the cached
 // index.html for navigations so the app still opens with no signal at all.
-// Cross-origin requests (Firebase/Firestore, Google Fonts, etc.) are left completely
-// alone — this service worker only ever touches this app's own same-origin files.
+// Firebase SDK modules from gstatic are cached (cache-first). All other cross-origin requests (Firestore, auth,
+// Google Fonts, etc.) are left completely alone.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
+  if (url.hostname === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/')) {
+    event.respondWith(
+      caches.open(SDK_CACHE).then((cache) =>
+        cache.match(event.request).then((hit) => hit || fetch(event.request).then((res) => { if (res && res.ok) cache.put(event.request, res.clone()); return res; }))
+      )
+    );
+    return;
+  }
   if (url.origin !== self.location.origin) return;
   event.respondWith(
     caches.match(event.request).then((cached) => {
