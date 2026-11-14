@@ -251,3 +251,17 @@ Ending a gaming segment now pre-fills at least 60 minutes (10, 30, 45, 59 or 60 
 - **No time-extension buttons:** +10m / +30m / +1h are gone everywhere (item rows and the time-up banner). A gaming item stays exactly as added; change its duration or price by tapping it (Item Information), or delete it and add a new one. The time-up banner now offers "Edit item" and "Dismiss" and never changes a bill.
 - **Checkout payment cards:** Cash, UPI, Bank Transfer, Card, Other and Pay later are large selectable tiles; the chosen one is highlighted in blue with a check mark. Nothing is pre-selected silently. Finalizing with no method asks "No payment method is selected… saved as UNPAID", and a partial payment names the methods recorded. "+ Split between methods" gives each split row its own tiles and amount. The chosen method(s) are saved on the invoice and credited to the matching account.
 - **Blue Start Session:** the Start Session, Items, Item Information and Checkout screens now use the app's existing brand blue token (`--accent`, #5b8def) instead of green. Other screens keep their existing theme; success/balance-cleared text keeps a green `--ok` colour.
+
+## Version 11 — Simpler invoice deletion & smart customer search
+
+**Invoice deletion (admin only)**
+- The typed `DELETE` box (and the mandatory reason) is gone. The dialog now reads **Delete Invoice?** — "Are you sure you want to permanently delete this invoice from all records?" — with **Cancel** and **Delete**.
+- Delete is immediate and permanent. Account balances, customer totals/visits, the daily record and the linked session are reversed exactly as before; dashboard, reports, customer history and invoice lists refresh at once. An audit-log entry remains.
+- Authentication is unchanged: the Admin PIN is still asked (if one is set) and checked inside the delete core, so staff cannot delete even by calling the function directly.
+- Bulk delete and "Delete forever" in the Deleted tab use the same simple dialog.
+
+**Customer autocomplete**
+- Typing in the customer name or mobile field (Customer sheet and Checkout) shows a dropdown directly beneath the field with name + `+91 XXXXX XXXXX`.
+- Name search is case-insensitive and matches prefixes, word starts, fragments and similar spellings ("bhav" finds Bavya). Mobile search matches prefixes, fragments and last digits (2+ digits).
+- Selecting fills name and mobile and keeps the saved customer (mobile is the customer ID). Nothing is created or duplicated by searching or selecting; with no match you simply keep typing a new customer.
+- Tap, arrow keys + Enter, and Escape (dismiss) are supported. Searches only the local customer store, so it works offline.
