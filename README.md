@@ -228,3 +228,6 @@ be sent automatically. The Admin PIN is a convenience lock per device.
 - **Backup & Restore** now lives in More. The Dashboard shows nothing about backups; a dot on the More tab and a card inside More remind you when one is due. Download or share a backup file (date and time in the name and on screen), validate and preview a file before restoring, and confirm before it replaces data. Backups cover the full history, not just the last 120 days.
 - **Back button.** More and every More sub-screen go back one level, then to the Dashboard, and only the Dashboard shows the exit confirmation. The back stack also survives a refresh, and history entries no longer pile up.
 - **Times-up** is a small banner (Extend · End Session · Dismiss). Swipe it away, tap Dismiss, or let it fade after 20 seconds. It never blocks the screen and never changes the session. It shows once per end time and again only after the segment is extended.
+
+### Version 7.1 — minimum billing
+Ending a gaming segment now pre-fills at least 60 minutes (10, 30, 45, 59 or 60 minutes played → 60 billed). Time beyond 60 still rounds up to 30-minute blocks (2-minute grace). Staff can edit the billed time in the End dialog (single or End All). The minimum itself is editable under More → Gaming Pricing (0 = no minimum).

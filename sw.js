@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lvl-books-v8';
+const CACHE_NAME = 'lvl-books-v9';
 const SDK_CACHE = 'lvl-books-sdk-v1';   // Firebase libraries, cached after the first online visit so the app also opens cold with no signal
 const APP_SHELL = [
   './',

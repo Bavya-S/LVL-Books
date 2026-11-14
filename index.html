@@ -405,7 +405,7 @@ const SPECIAL_PRODUCTS = [
 const DEFAULT_SETTINGS = {
   businessName:'LVL Gaming Café', phone:'', address:'', email:'', gstin:'',
   invoicePrefix:'LVL-INV-', nextInvoiceNo:1, sessionPrefix:'LVL-SES-',
-  defaultGamingMinutes:60, customDurationsEnabled:false, customRules:[],
+  defaultGamingMinutes:60, minBillMinutes:60, customDurationsEnabled:false, customRules:[],
   overtimeMode:'block', overtimeBlockMinutes:10, overtimeCustomUnit:'unit',
   accompanyDefaultMinutes:60,
   taxEnabled:false, taxRate:0, taxLabel:'GST',
@@ -1420,7 +1420,8 @@ async function extendLine(sid, lid, mins){
   if(ok){ document.getElementById('expiryBanner-'+sid+'-'+lid)?.remove(); render(); }
 }
 /* Suggested billable time: time played rounded up to the next 30-minute block, with a 2-minute grace so a few seconds over never costs a whole extra block. Staff always confirm or change it. */
-function suggestMinutes(l){ const em=lineElapsedMs(l)/60000; return Math.max(30, Math.ceil((em-2)/30)*30); }
+function minBill(){ const m=Number((state.settings||{}).minBillMinutes); return isFinite(m)&&m>=0 ? Math.round(m) : 60; }   // minimum billed per ended segment (default 60 min); 0 turns it off
+function suggestMinutes(l){ const em=lineElapsedMs(l)/60000; return Math.max(minBill(), 30, Math.ceil((em-2)/30)*30); }
 async function switchLine(sid, lid){ state.afterEnd = { sid, lid, mode:'switch' }; await endLineModal(sid, lid); }
 async function changePlayersFlow(sid, lid){ state.afterEnd = { sid, lid, mode:'players' }; await endLineModal(sid, lid); }
 async function endLineModal(sid, lid){
@@ -1433,9 +1434,9 @@ async function endLineModal(sid, lid){
   window.__enPrev=prev; window.__enSet=(m)=>{ document.getElementById('enDur').value=m; document.getElementById('enUnit').value='minutes'; prev(); };
   const mode = state.afterEnd && state.afterEnd.sid===sid && state.afterEnd.lid===lid ? state.afterEnd.mode : null;
   openModal(`<button class="close" onclick="state.afterEnd=null;closeModal()">✕</button><h3>End segment — ${esc(gamingTitle(l))}</h3>
-    <p class="muted" style="font-size:13px">Started ${timeStr(l.startTime||l.createdAt)} · ran <b>${fmtDur(el)}</b> · billed so far <b>${fmtDur(l.minutes)}</b>. Confirm what to bill for this segment — it will not keep growing after you end it.</p>
+    <p class="muted" style="font-size:13px">Started ${timeStr(l.startTime||l.createdAt)} · ran <b>${fmtDur(el)}</b> · billed so far <b>${fmtDur(l.minutes)}</b>. Confirm what to bill for this segment — it will not keep growing after you end it.${minBill()?` <b>Minimum ${fmtDur(minBill())}</b> is pre-filled; you can change it below.`:''}</p>
     <label>Billed duration</label><div class="row"><input id="enDur" type="number" step="any" min="0" value="${sug}" oninput="window.__enPrev()"><select id="enUnit" onchange="window.__enPrev()"><option value="minutes" selected>minutes</option><option value="hours">hours</option></select></div>
-    <div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" onclick="window.__enSet(${sug})">Time played, rounded up (${fmtDur(sug)})</button><button class="btn sm" onclick="window.__enSet(${l.minutes})">Keep ${fmtDur(l.minutes)}</button></div>
+    <div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" onclick="window.__enSet(${sug})">${minBill()?'Minimum / time played':'Time played, rounded up'} (${fmtDur(sug)})</button><button class="btn sm" onclick="window.__enSet(${l.minutes})">Keep ${fmtDur(l.minutes)}</button></div>
     <div id="enPrev" style="margin:10px 0;font-size:15px"></div>
     <div class="grid2"><button class="btn" onclick="state.afterEnd=null;closeModal()">Cancel</button><button class="btn primary" onclick="confirmEndLine(${sid},${lid})">${mode==='switch'?'End & pick replacement':mode==='players'?'End & set new player count':'End segment'}</button></div>`);
   prev();
@@ -1472,7 +1473,7 @@ async function endAllModal(sid){
   const open = openGamingLines(s);
   if(!open.length){ tell('No gaming segments are running or paused in this session.'); return; }
   openModal(`<button class="close" onclick="closeModal()">✕</button><h3>End ${open.length} segment${open.length>1?'s':''}</h3>
-    <p class="muted" style="font-size:12px">Confirm the billed duration of each segment (pre-filled with time played, rounded up to 30 minutes). Ended segments stop accumulating charges.</p>
+    <p class="muted" style="font-size:12px">Confirm the billed duration of each segment (pre-filled with time played, rounded up to 30 minutes, minimum ${fmtDur(minBill())}). You can edit each one. Ended segments stop accumulating charges.</p>
     ${open.map(l=>`<div class="card" style="background:var(--panel2);padding:10px"><b>${esc(gamingTitle(l))}</b><div class="timer">Started ${timeStr(l.startTime||l.createdAt)} · ran ${fmtDur(Math.ceil(lineElapsedMs(l)/60000))} · billed ${fmtDur(l.minutes)}</div>
       <div class="row" style="align-items:center;margin-top:6px"><input id="ea-${l.id}" type="number" min="1" step="any" value="${suggestMinutes(l)}"><span class="muted" style="font-size:12px">minutes</span></div></div>`).join('')}
     <div class="grid2"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="confirmEndAll(${sid})">End all segments</button></div>`);
@@ -3130,7 +3131,7 @@ async function deletePhysical(id){
 /* ---- Gaming pricing ---- */
 async function screenSetPricing(){
   const sts = await dbAll('stations'); const s=state.settings;
-  return setBack('Gaming Pricing') + `<div class="card"><label>Default duration for a new gaming line (minutes)</label><input id="gpDefault" type="number" min="30" step="30" value="${s.defaultGamingMinutes||60}"><div class="muted" style="font-size:11px;margin-top:4px">Pre-filled when a gaming setup is added. Staff can always edit it, and nothing is charged beyond what is billed on the line.</div></div>` +
+  return setBack('Gaming Pricing') + `<div class="card"><label>Default duration for a new gaming line (minutes)</label><input id="gpDefault" type="number" min="30" step="30" value="${s.defaultGamingMinutes||60}"><div class="muted" style="font-size:11px;margin-top:4px">Pre-filled when a gaming setup is added. Staff can always edit it, and nothing is charged beyond what is billed on the line.</div></div><div class="card"><label>Minimum billed time when a gaming segment ends (minutes)</label><input id="gpMin" type="number" min="0" step="30" value="${minBill()}"><div class="muted" style="font-size:11px;margin-top:4px">Default 60: a segment that ran 10, 30, 45 or 59 minutes is billed 60 minutes. Staff can still change the billed time when ending a segment. Use 0 for no minimum.</div></div>` +
     sts.map(st=>`<div class="card"><b>${esc(setupLabel(st))}</b>${setupPlayers(st).map(n=>`<div class="row" style="gap:8px;margin-top:6px;align-items:center"><span class="muted" style="width:54px;font-size:12px">${n} player${n>1?'s':''}</span><input id="gp-${st.id}-${n}-h" type="number" min="0" value="${(st.rates[n]||[0,0])[0]}"><input id="gp-${st.id}-${n}-f" type="number" min="0" value="${(st.rates[n]||[0,0])[1]}"></div>`).join('')}</div>`).join('') +
     `<div class="muted" style="font-size:11px;margin-bottom:8px">Left box = ₹ per hour, right box = ₹ per 30 minutes. Existing bills keep the rate they were created with.</div>
     <div class="grid2"><button class="btn primary" onclick="saveGamingPricing()">Save pricing</button><button class="btn" onclick="resetGamingPricing()">Reset LVL defaults</button></div>`;
@@ -3138,7 +3139,7 @@ async function screenSetPricing(){
 async function saveGamingPricing(){
   if(!needAdmin()) return; const sts = await dbAll('stations');
   for(const st of sts){ for(const n of setupPlayers(st)){ const h=Number(document.getElementById(`gp-${st.id}-${n}-h`).value), f=Number(document.getElementById(`gp-${st.id}-${n}-f`).value); if(!(h>=0)||!(f>=0)){ tell('Enter valid rates.'); return; } st.rates[n]=[h,f]; } await dbPut('stations', st); }
-  const dm = Number(document.getElementById('gpDefault').value); await patchSettings({ defaultGamingMinutes: dm>0?Math.round(dm):60 });
+  const dm = Number(document.getElementById('gpDefault').value); const mb = Number(document.getElementById('gpMin').value); await patchSettings({ defaultGamingMinutes: dm>0?Math.round(dm):60, minBillMinutes: mb>=0?Math.round(mb):60 });
   showToast('Pricing saved'); render();
 }
 async function resetGamingPricing(){
