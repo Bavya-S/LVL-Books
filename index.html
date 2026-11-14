@@ -163,6 +163,7 @@ td,th{padding:6px 4px;text-align:left;border-bottom:1px solid var(--line)}
 .sess-open:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .sess-card:has(.sess-open:active){border-color:var(--accent)}
 .sess-card .sess-acts .btn{position:relative;z-index:2}
+.sess-3{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:8px}.sess-3 .btn{min-height:44px;padding:8px 6px}
 .sess-chev{color:var(--muted);font-size:20px;line-height:1;margin-left:6px;vertical-align:middle}
 /* ---- top bar back / home ---- */
 .tb-left{display:flex;align-items:center;gap:8px;min-width:0}
@@ -198,6 +199,110 @@ html,body{overscroll-behavior-y:contain}
 .tu .tu-a .btn,.tu .tu-x .btn{flex:1}
 .tu .tu-x[hidden]{display:none}
 .tu button{touch-action:manipulation}
+
+/* ---- Zoho-style transaction screens: black canvas, charcoal cards, restrained green ---- */
+/* ---- checkout payment cards ---- */
+.paygrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.paytile{position:relative;min-height:54px;padding:8px 6px;border:1.5px solid var(--line);background:var(--panel2);color:var(--text);border-radius:12px;font:600 15px/1.15 inherit;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;text-align:center;-webkit-appearance:none;appearance:none}
+.paytile:active{background:var(--line)}
+.paytile.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 24%,var(--panel2));color:#fff;box-shadow:inset 0 0 0 1px var(--accent)}
+.paytile.sel::after{content:"✓";position:absolute;top:3px;right:7px;font-size:12px;font-weight:700;color:var(--accent)}
+.payrow{padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.payrow:last-of-type{border-bottom:0;margin-bottom:4px}
+.payhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.payx{background:transparent;border:0;color:var(--red);font-size:13px;min-height:32px;cursor:pointer}
+.payamt{margin-top:10px}.payamt label{margin:0 0 4px}.payby{color:var(--accent)}
+.payamt input{font-size:18px;font-weight:600;min-height:48px}
+.paynote{margin-top:8px;font-size:12px;color:var(--muted)}
+.paysplit{margin-top:8px}
+body.zb-on{--bg:#000;--panel:#1c1c1e;--panel2:#2c2c2e;--line:#3a3a3c;--text:#fff;--muted:#8e8e93;--accent:#5b8def;--accent-ink:#0b1220;--green:#5b8def;--ok:#4fb286;--red:#ff5d73;--amber:#f2b84b;color-scheme:dark}
+.zb{padding-top:0}
+.zhead{position:sticky;top:env(safe-area-inset-top,0px);z-index:8;background:var(--bg);display:grid;grid-template-columns:52px 1fr 52px;align-items:center;margin:0 -14px 4px;padding:8px 14px;min-height:60px}
+.zhead h1{margin:0;text-align:center;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zcirc{width:44px;height:44px;border-radius:50%;border:0;background:#2c2c2e;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.zcirc svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.zcirc.ok{background:var(--green);color:var(--accent-ink)}
+.zcirc:active{filter:brightness(.85)}
+.zh2{font-size:17px;font-weight:600;margin:18px 4px 8px}
+.zsec{display:flex;justify-content:space-between;align-items:center;font-size:12px;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);margin:22px 4px 8px}
+.zsec a,.zrow a{color:var(--green);text-decoration:none;text-transform:none;font-size:14px}
+.zcard{background:var(--panel);border-radius:16px;padding:2px 16px;margin-bottom:12px}
+.zrow{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:8px 0;border-bottom:1px solid var(--line)}
+.zrow:last-child{border-bottom:0}
+.zrow.tap{cursor:pointer}.zrow.tap:active{background:#ffffff0d}
+.zrow .l{color:var(--text);flex:0 1 auto;min-width:0}
+.zrow .l.req{color:var(--red)}
+.zrow .v{color:var(--green);text-align:right;flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:6px;overflow-wrap:anywhere}
+.zrow .ph{color:var(--muted)}
+.zrow.col{flex-direction:column;align-items:stretch;gap:6px;padding:12px 0}
+.zrow input:not([type=checkbox]),.zrow select{background:transparent;border:0;color:var(--green);text-align:right;padding:6px 0;min-height:36px;width:100%;font-size:16px;border-radius:0}
+.zrow input::placeholder{color:var(--muted)}
+.zrow input:focus,.zrow select:focus{outline:0;background:#ffffff0d}
+.zrow select{appearance:none;-webkit-appearance:none;direction:rtl}
+.zrow input[type=date]{color-scheme:dark}
+.zrow textarea,.zcard textarea{background:#000;border:1px solid var(--line);border-radius:10px;color:var(--text);min-height:92px;padding:10px;font-size:16px}
+.zchev{width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.zempty{color:var(--muted);text-align:center;padding:22px 8px;font-size:14px}
+/* item lines */
+.zline{padding:12px 0;border-bottom:1px solid var(--line)}
+.zl-row{display:flex;align-items:center;gap:10px}
+.zl-main{flex:1;min-width:0;display:grid;grid-template-columns:1fr auto;gap:2px 12px;cursor:pointer;border-radius:8px}
+.zl-main[role=button]:active{background:#ffffff0d}
+.zl-main:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.zl-l{min-width:0;overflow-wrap:anywhere}
+.zl-r{text-align:right;white-space:nowrap}
+.zl-qr{color:var(--muted);font-size:13px;margin-top:2px}
+.zl-desc,.zl-meta{color:var(--muted);font-size:12.5px;margin-top:3px}
+.zl-meta a{color:var(--green)}
+.zl-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.zl-acts button,.zchip{background:transparent;border:1px solid var(--line);color:var(--green);border-radius:999px;padding:6px 12px;font-size:13px;min-height:34px;cursor:pointer;font-family:inherit}
+
+.zchip.sel{background:var(--green);color:var(--accent-ink);border-color:var(--green);font-weight:600}
+.zdel{flex:0 0 auto;width:28px;height:28px;border-radius:50%;border:0;background:var(--red);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.zdel span{display:block;width:12px;height:2.5px;background:#fff;border-radius:2px}
+.zmv{display:flex;flex-direction:column;gap:2px;flex:0 0 auto}
+.zmv button{background:#2c2c2e;border:0;color:#fff;border-radius:6px;width:34px;height:24px;font-size:11px;cursor:pointer}
+.zmv button:disabled{opacity:.3}
+.zadd{display:flex;align-items:center;gap:12px;width:100%;background:transparent;border:0;border-bottom:1px solid var(--line);color:var(--green);font-size:16px;padding:14px 0;min-height:52px;cursor:pointer;text-align:left;font-family:inherit}
+.zplus{width:26px;height:26px;border-radius:50%;background:var(--green);display:inline-flex;align-items:center;justify-content:center}
+.zplus svg{width:16px;height:16px;stroke:var(--accent-ink);fill:none;stroke-width:3;stroke-linecap:round}
+.ztot{padding:10px 0 6px}
+.ztot>div{display:flex;justify-content:flex-end;gap:28px;padding:5px 0;font-size:15px}
+.ztot>div span{min-width:120px;text-align:right}
+.ztot>div b{font-weight:400;min-width:92px;text-align:right}
+.ztot .zedit{justify-content:flex-end}.ztot .zedit a{display:inline-flex;align-items:center;gap:2px;font-size:16px;color:var(--green);text-decoration:none;min-height:36px}
+.ztot .zgrand{border-top:1px solid var(--line);margin-top:10px;padding-top:16px;font-size:16px}
+.ztot .zgrand b{font-weight:600}
+.zgear{background:transparent;border:0;color:var(--green);padding:4px;cursor:pointer;display:inline-flex}
+.zgear svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round}
+.zacts{display:flex;flex-direction:column;gap:10px;margin:18px 0 8px}
+.zbtn{display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;background:var(--panel);border:0;border-radius:14px;color:#fff;font-size:16px;font-weight:500;cursor:pointer;font-family:inherit}
+.zbtn.primary{background:var(--green);color:var(--accent-ink);font-weight:600}
+.zbtn.danger{background:transparent;color:var(--red)}
+.zbtn:active{filter:brightness(.85)}
+.zacts .grid2{gap:10px}
+/* items list + item information */
+.zsearch{background:var(--panel);border:0;border-radius:12px;color:#fff;margin:6px 0 8px;min-height:46px;padding:0 14px}
+.zchips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.zchips::-webkit-scrollbar{display:none}
+.zchips .zchip{flex:0 0 auto;color:#fff}
+.zlist{padding:0 16px}
+.zitem{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:54px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.zitem:last-child{border-bottom:0}
+.zitem:active{background:#ffffff0d}
+.zitem:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
+.zi-n{font-weight:600;overflow-wrap:anywhere}.zi-n small{display:block;color:var(--muted);font-weight:400;font-size:12px;margin-top:2px}
+.zi-p{color:#fff;white-space:nowrap}
+.zqty{gap:8px}
+.zqty input{width:76px!important;text-align:right}
+.zstep{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#2c2c2e;color:#fff;font-size:20px;line-height:1;cursor:pointer;padding:0}
+.zclr{background:transparent;border:0;color:#8e8e93;padding:0;display:inline-flex;cursor:pointer}
+.zclr svg{width:22px;height:22px}
+.zhint{color:var(--muted);font-size:12.5px;padding:0 0 12px}
+/* slide transitions between the screens of the flow */
+@keyframes zSlideF{from{transform:translateX(34px);opacity:.2}to{transform:none;opacity:1}}
+@keyframes zSlideB{from{transform:translateX(-34px);opacity:.2}to{transform:none;opacity:1}}
+.sl-f{animation:zSlideF .2s ease-out}.sl-b{animation:zSlideB .2s ease-out}
 ::-webkit-scrollbar{width:0;height:0}
 @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important;scroll-behavior:auto!important} }
 
@@ -405,7 +510,7 @@ const SPECIAL_PRODUCTS = [
 const DEFAULT_SETTINGS = {
   businessName:'LVL Gaming Café', phone:'', address:'', email:'', gstin:'',
   invoicePrefix:'LVL-INV-', nextInvoiceNo:1, sessionPrefix:'LVL-SES-',
-  defaultGamingMinutes:60, minBillMinutes:60, customDurationsEnabled:false, customRules:[],
+  defaultGamingMinutes:60, customDurationsEnabled:false, customRules:[],
   overtimeMode:'block', overtimeBlockMinutes:10, overtimeCustomUnit:'unit',
   accompanyDefaultMinutes:60,
   taxEnabled:false, taxRate:0, taxLabel:'GST',
@@ -478,7 +583,7 @@ function computeLine(l){
   return l;
 }
 /* Bill totals. Discount % applies ONLY to gaming lines (food is never discounted at invoice level). */
-function billTotals(lines, gamingDiscountPct, settings){
+function billTotals(lines, gamingDiscountPct, settings, extra){
   const b={gaming:0,accompany:0,overtime:0,food:0,other:0};
   lines.forEach(l=>{ b[l.bucket||'other'] += l.total; });
   const subtotal = b.gaming+b.accompany+b.overtime+b.food+b.other;
@@ -491,7 +596,10 @@ function billTotals(lines, gamingDiscountPct, settings){
     const dTax = b.gaming>0 ? discount*gTaxable/b.gaming : 0;
     tax = Math.round((taxable - dTax) * (Number(settings.taxRate)||0)/100);
   }
-  return { ...b, subtotal, discountPct:pct, discount, tax, grand: subtotal - discount + tax };
+  const x = extra||{}; const adjustment = Math.round(Number(x.adjustment)||0);          // whole rupees: totals stay exact integers
+  const tcs = Math.round((subtotal - discount + tax) * (Number(x.tcsPct)||0) / 100);   // collected on top, like tax
+  const tds = Math.round((subtotal - discount) * (Number(x.tdsPct)||0) / 100);          // deducted by the customer
+  return { ...b, subtotal, discountPct:pct, discount, tax, adjustment, tcs, tds, grand: subtotal - discount + tax + adjustment + tcs - tds };
 }
 function overtimeUnitLabel(s){
   if(s.overtimeMode==='occurrence') return 'occurrence';
@@ -663,15 +771,16 @@ function navSnap(){
   const e = { screen:state.screen, scrollY:Math.round(window.scrollY||0) };
   NAV_IDENTITY.forEach(k=>{ if(state[k]!==undefined && state[k]!==null) e[k]=state[k]; });
   if(state.screen==='picker' && state.pick) e.sessionId = state.pick.sid;
+  if(state.screen==='itemInfo' && state.ii){ e.sessionId = state.ii.sid; e.iiKey = state.ii.lid ? 'L'+state.ii.lid : 'N'; }
   if(state.screen==='checkout' && state.ckForm) e.sessionId = state.ckForm.sid;
   return e;
 }
 function navKey(e){
-  const id = ['session','picker','checkout'].includes(e.screen) ? e.sessionId : e.screen==='invoiceView' ? e.invoiceId : e.screen==='customerProfile' ? e.custProfile : e.screen==='vendorProfile' ? e.vendorId : e.screen==='employeeProfile' ? e.empId : '';
+  const id = ['session','picker','checkout','itemInfo'].includes(e.screen) ? e.sessionId+(e.iiKey||'') : e.screen==='invoiceView' ? e.invoiceId : e.screen==='customerProfile' ? e.custProfile : e.screen==='vendorProfile' ? e.vendorId : e.screen==='employeeProfile' ? e.empId : '';
   return e.screen + ':' + (id===undefined||id===null ? '' : id);
 }
 function go(screen, opts){
-  opts = opts||{};
+  opts = opts||{}; const prevScreen = state.screen;
   navCur.scrollY = Math.round(window.scrollY||0);
   let scroll = 0;
   state.screen = screen;
@@ -687,31 +796,31 @@ function go(screen, opts){
     else if(!opts.replace && !(['picker','checkout'].includes(navCur.screen) && screen==='session') && navKey(navCur)!==nk){ navStack.push(Object.assign({}, navCur)); }
   }
   navCur = next; state.pendingScroll = scroll;
+  if(prevScreen!==screen && (ZB_SCREENS.includes(prevScreen)||ZB_SCREENS.includes(screen))) state.anim = 'f';
   return render();   // render() saves the route
 }
 function navRestore(e){
   NAV_IDENTITY.forEach(k=>{ if(e[k]!==undefined) state[k]=e[k]; });
+  if(state.screen!==e.screen && (ZB_SCREENS.includes(state.screen)||ZB_SCREENS.includes(e.screen))) state.anim = 'b';
   state.screen = e.screen; state.billEdSid = null; navCur = Object.assign({}, e); state.pendingScroll = e.scrollY||0;
   return render();
 }
 /* Things that must be settled before leaving a screen. Returns false if the user chose to stay. */
 async function leaveGuard(){
-  if(state.screen==='picker' && state.pick){
-    const t = pkTotals();
-    if(t.types && !(await askConfirm(`${t.types} selected item type(s) have not been added to the bill. Discard them?`,'Discard',true))) return false;
-  } else if(state.screen==='session'){ await persistHeader(state.sessionId, true); }   // unsaved header edits are saved, never lost
+  if(state.screen==='session'){ await persistHeader(state.sessionId, true); }   // unsaved header edits are saved, never lost
   return true;
 }
 /* One step back. Picker and checkout return to the session bill; everything else returns to the previous screen. */
 async function goBack(fallback){
   if(!(await leaveGuard())) return;
-  if(state.screen==='picker' && state.pick){ const sid=state.pick.sid; state.pick=null; openSession(sid); return; }
+  if(state.screen==='itemInfo' && state.ii){ const ii=state.ii; state.ii=null; if(!ii.lid && state.pick) return go('picker'); return openSession(ii.sid); }   // unsaved item changes are discarded
+  if(state.screen==='picker' && state.pick){ const sid=state.pick.sid; state.pick=null; return openSession(sid); }
   if(state.screen==='checkout' && state.ckForm){ openSession(state.ckForm.sid); return; }
   const e = navStack.pop();
   if(e) return navRestore(e);
   if(state.screen!=='dashboard') return go(fallback && fallback!==state.screen ? fallback : 'dashboard');
 }
-async function navTab(id){ if(!(await leaveGuard())) return; if(state.screen==='picker') state.pick=null; go(id); }
+async function navTab(id){ if(!(await leaveGuard())) return; if(state.screen==='picker') state.pick=null; if(state.screen==='itemInfo') state.ii=null; go(id); }
 function dismissTopLayer(){   // dialogs first, then bottom sheets
   const dlgs = document.querySelectorAll('#dlgRoot .dlg-bg');
   if(dlgs.length){ dlgs[dlgs.length-1].click(); return true; }
@@ -760,17 +869,18 @@ function saveRoute(){
     const y = Math.round(window.scrollY||0);
     const a = state.adm||{};
     sessionStorage.setItem(ROUTE_KEY, JSON.stringify({ v:2, ts:Date.now(), cur:Object.assign({}, navCur, {scrollY:y}), stack:navStack, y,
-      ck:state.ckForm, pick:state.pick, sessFilter:state.sessFilter, invFilter:state.invFilter, rep:state.rep,
+      ck:state.ckForm, pick:state.pick, ii:state.ii, sessFilter:state.sessFilter, invFilter:state.invFilter, rep:state.rep,
       adm:{ tab:a.tab, q:a.q, from:a.from, to:a.to, status:a.status, method:a.method } }));
   }catch(e){}
 }
 function restoreRoute(){
   let r = null; try{ r = JSON.parse(sessionStorage.getItem(ROUTE_KEY)||'null'); }catch(e){}
-  if(!r || r.v!==2 || !r.cur || !r.cur.screen || r.cur.screen==='inventory' || Date.now()-r.ts > 12*3600*1000) return;
+  if(!r || r.v!==2 || !r.cur || !r.cur.screen || r.cur.screen==='inventory' || (r.cur.screen==='itemInfo' && !r.ii) || Date.now()-r.ts > 12*3600*1000) return;
   NAV_IDENTITY.forEach(k=>{ if(r.cur[k]!==undefined) state[k]=r.cur[k]; });
   state.screen = r.cur.screen; navCur = Object.assign({}, r.cur); navStack = Array.isArray(r.stack) ? r.stack : []; state.pendingScroll = r.y||0;
   if(r.ck) state.ckForm = r.ck;
-  if(r.pick) state.pick = Object.assign(r.pick, { busy:false, lock:false });
+  if(r.pick) state.pick = r.pick;
+  if(r.ii) state.ii = Object.assign(r.ii, { saving:false });
   ['sessFilter','invFilter'].forEach(k=>{ if(r[k]!==undefined && r[k]!==null) state[k]=r[k]; });
   if(r.rep && typeof r.rep==='object') state.rep = Object.assign({ range:'month', from:null, to:null, tab:'overview', gran:'auto', f:{} }, r.rep);
   if(r.adm) Object.assign(state.adm, r.adm, { sel:{} });
@@ -879,7 +989,7 @@ async function render(){
     vendors:screenVendors, vendorProfile:screenVendorProfile, purchases:screenPurchases, employees:screenEmployees, employeeProfile:screenEmployeeProfile,
     cashbank:screenCashBank, reports:screenReports, session:screenSession, checkout:screenCheckout, invoiceView:screenInvoiceView,
     set_items:screenSetItems, set_stations:screenSetStations, set_pricing:screenSetPricing, set_custom:screenSetCustom, set_overtime:screenSetOvertime,
-    set_accompany:screenSetAccompany, picker:screenPicker, set_physical:screenSetPhysical, set_tax:screenSetTax, set_invoice:screenSetInvoice, set_business:screenSetBusiness, set_perm:screenSetPerm, adminInvoices:screenAdminInvoices };
+    set_accompany:screenSetAccompany, picker:screenPicker, itemInfo:screenItemInfo, set_physical:screenSetPhysical, set_tax:screenSetTax, set_invoice:screenSetInvoice, set_business:screenSetBusiness, set_perm:screenSetPerm, adminInvoices:screenAdminInvoices };
   const fn = SCREENS[state.screen] || screenDashboard;
   let body;
   try{ body = await fn(); }
@@ -890,13 +1000,16 @@ async function render(){
   }
   if(seq !== __renderSeq) return;   // a newer render started meanwhile — never paint a stale one (prevents duplicated content)
   root.classList.toggle('wide', state.screen==='reports');
-  document.body.classList.toggle('nonav', ['picker','checkout'].includes(state.screen));
-  document.body.classList.toggle('hasfoot', ['picker','checkout'].includes(state.screen));
-  document.body.classList.toggle('tall', state.screen==='picker');
-  root.innerHTML = topbarHtml()
+  const zb = ZB_SCREENS.includes(state.screen);
+  document.body.classList.toggle('zb-on', zb); root.classList.toggle('zb', zb);
+  document.body.classList.toggle('nonav', zb);
+  document.body.classList.toggle('hasfoot', state.screen==='checkout');
+  document.body.classList.remove('tall');
+  root.innerHTML = (zb ? '' : topbarHtml())
     + body + `<div style="height:28px"></div>`;
   if(window.deferredInstallPrompt) document.getElementById('installBtn').style.display='inline-block';
   if(state.pendingScroll!==null && state.pendingScroll!==undefined){ const y=state.pendingScroll; state.pendingScroll=null; try{ window.scrollTo(0,y); }catch(e){} }   // restore the list position after Back
+  if(state.anim){ const d=state.anim; state.anim=null; root.classList.remove('sl-f','sl-b'); void root.offsetWidth; root.classList.add('sl-'+d); }
   if(refreshing) setRefreshUI(true);
   saveRoute();
 }
@@ -985,6 +1098,11 @@ function logHist(l, patch, fields){
 const HIST_FIELDS = ['minutes','players','hr','half','unitPrice','qty','discountPct','free','physicalName','startTime','endedAt'];
 function histText(h){ const f=v=>v===null||v===undefined?'—':(h.field==='minutes'?fmtDur(v):(h.field==='startTime'||h.field==='endedAt')?timeStr(v):String(v)); return `${new Date(h.t).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})} · ${h.by} · ${h.field}: ${f(h.from)} → ${f(h.to)}`; }
 function sessionTotals(s){ return billTotals(s.lines, 0, state.settings); }
+function lineDetail(l){
+  if(l.kind==='gaming') return `${fmtDur(l.minutes)} · ${fmt(l.hr)}/hr`;
+  if(l.kind==='accompany') return l.free ? `${l.qty} person(s) · ${fmtDur(l.minutes)} · free (parent)` : `${l.qty} person(s) · ${fmtDur(l.minutes)} · ${fmt(l.unitPrice)}/person/hr`;
+  return `${l.qty} ${esc(l.unit||'')} × ${fmt(l.unitPrice)}`;
+}
 function openGamingLines(s){ return s.lines.filter(l=>l.kind==='gaming' && l.state!=='ended'); }
 function gamingTitle(l){ return /Player/.test(l.name||'') ? l.name : `${l.name} · ${l.players}P`; }
 /* A physical console may only be in ONE running segment at a time; many segments of the same MODEL are always fine. */
@@ -996,7 +1114,7 @@ async function physicalBusy(physId, exceptSid, exceptLid){
 }
 async function afterLineChange(sid){
   await render();
-  if(state.billEdSid===sid) await billEditorModal(sid); else closeModal();
+  closeModal();
 }
 
 /* ---- start / open ---- */
@@ -1006,238 +1124,346 @@ async function startSession(){
   showToast('Session '+sesCode(s)+' started');
   openSession(s.id);
 }
-function openSession(id){ state.sessionId = id; state.billEdSid = null; go('session'); }
+function openSession(id){ state.sessionId = id; state.billEdSid = null; state.reorder = false; state.ii = null; return go('session'); }
 
 /* ---- line cards & session screen ---- */
-function lineBadge(l){
-  if(l.kind!=='gaming') return '';
-  if(l.state==='running') return '<span class="pill neon">Running</span>';
-  if(l.state==='paused') return '<span class="pill amber">Paused</span>';
-  return '<span class="pill green">Ended</span>';
+/* ============ Zoho-style "Start Session / Add Invoice" screen ============ */
+function n2(v){ return (Math.round((Number(v)||0)*100)/100).toFixed(2); }
+const ZB_SCREENS = ['session','picker','itemInfo','checkout'];
+const ZI = {
+  x:'<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  back:'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
+  ok:'<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  chev:'<svg class="zchev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
+  gear:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>',
+  clear:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="currentColor" stroke="none"/><path d="M9 9l6 6M15 9l-6 6" stroke="#000"/></svg>'
+};
+/* Fixed header: X (cancel) or ‹ (back) on the left, title in the centre, green ✓ on the right. */
+function zhead(title, o){
+  o = o||{};
+  const left = o.back ? `<button type="button" class="zcirc" aria-label="Back" onclick="goBack(${o.fallback?`'${o.fallback}'`:''})">${ZI.back}</button>`
+                      : `<button type="button" class="zcirc" aria-label="Close" onclick="goBack('dashboard')">${ZI.x}</button>`;
+  const right = o.plus ? `<button type="button" class="zcirc" aria-label="${o.plusLabel||'Add'}" onclick="${o.plus}">${ZI.plus}</button>`
+              : o.ok ? `<button type="button" class="zcirc ok" id="zOk" aria-label="${o.okLabel||'Save'}" onclick="${o.ok}">${ZI.ok}</button>` : '<span></span>';
+  return `<div class="zhead">${left}<h1>${esc(title)}</h1>${right}</div>`;
 }
-function lineDetail(l){
-  if(l.kind==='gaming') return `${fmtDur(l.minutes)} · ${fmt(l.hr)}/hr · ${fmt(l.half)}/30 min`;
-  if(l.kind==='accompany') return l.free ? `${l.qty} person(s) · ${fmtDur(l.minutes)} · free (parent)` : `${l.qty} person(s) · ${fmtDur(l.minutes)} · ${fmt(l.unitPrice)}/person/hr`;
-  return `${l.qty} ${esc(l.unit||'')} × ${fmt(l.unitPrice)}`;
+function finOf(s){ const f=(s&&s.fin)||{}; return { discountPct:Number(f.discountPct)||0, adjustment:Number(f.adjustment)||0, tcsPct:Number(f.tcsPct)||0, tdsPct:Number(f.tdsPct)||0 }; }
+function sessionBill(s){ const f=finOf(s); return billTotals(s.lines, f.discountPct, state.settings, f); }
+function zQtyRate(l){ return l.kind==='gaming' ? `${n2((l.minutes||0)/60)} × ${n2(l.hr)}` : `${n2(l.qty)} × ${n2(l.unitPrice)}`; }
+function zLineDesc(l){
+  const bits = [];
+  if(l.kind==='gaming'){ bits.push(`${fmtDur(l.minutes)} billed`); }
+  if(l.kind==='accompany'){ bits.push(`${fmtDur(l.minutes)} per person${l.free?' · free (parent)':''}`); }
+  if(l.included&&l.included.length) bits.push('Includes '+l.included.map(esc).join(' + '));
+  if(l.discountPct>0) bits.push(`Discount ${l.discountPct}%`);
+  return bits.join(' · ');
 }
-function lineCard(s, l, editable, compact){
+function zLine(s, l, editable, reorder, i, n){
   const g = l.kind==='gaming', open = g && l.state!=='ended';
-  const times = g ? `<div class="timer">Started ${timeStr(l.startTime||l.createdAt)}${l.endedAt?' · Ended '+timeStr(l.endedAt)+' · ran '+fmtDur(Math.ceil(lineElapsedMs(l)/60000)):''}</div>` : '';
-  const timer = open ? `<div class="timer" id="lt-${s.id}-${l.id}">Billed: ${fmtDur(l.minutes)}</div>` : '';
-  const stn = g ? `<div class="timer">${l.physicalName?'Station: '+esc(l.physicalName):'No station assigned'}${editable&&open?` · <a href="#" style="color:var(--accent)" onclick="assignPhysicalModal(${s.id},${l.id});return false">${l.physicalName?'change':'assign'}</a>`:''}</div>` : '';
-  const extras = (l.included&&l.included.length ? `<div class="timer">Includes: ${l.included.map(esc).join(' + ')}</div>` : '') + (l.notes ? `<div class="timer">Note: ${esc(l.notes)}</div>` : '') + (l.discountPct>0 ? `<div class="timer">Discount ${l.discountPct}%</div>` : '');
-  const acts = !editable ? '' : `<div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
-      ${open ? `<button class="btn sm" onclick="extendLine(${s.id},${l.id},30)">+30m</button><button class="btn sm" onclick="extendLine(${s.id},${l.id},60)">+1h</button><button class="btn sm pink" onclick="endLineModal(${s.id},${l.id})">End</button><button class="btn sm" onclick="changePlayersFlow(${s.id},${l.id})">Players</button><button class="btn sm" onclick="switchLine(${s.id},${l.id})">Switch</button>` : ''}
-      <button class="btn sm" onclick="editLineModal(${s.id},${l.id})">Edit</button>
-      <button class="btn sm" onclick="duplicateLine(${s.id},${l.id})">Copy</button>
-      <button class="btn sm danger" aria-label="Delete ${esc(l.name)}" onclick="deleteLine(${s.id},${l.id})">Delete</button></div>`;
-  return `<div class="card" style="background:var(--panel2);padding:10px" data-line="${l.id}">
-    <div class="row" style="justify-content:space-between;gap:8px">
-      <div style="min-width:0"><b>${esc(g?gamingTitle(l):l.name)}</b> ${lineBadge(l)}${l.history&&l.history.length?`<span class="tag">edited ×${l.history.length}</span>`:''}<br><span class="muted" style="font-size:12px">${lineDetail(l)}</span></div>
-      <div style="font-weight:600;white-space:nowrap">${fmt(l.total)}</div>
-    </div>${times}${timer}${stn}${extras}${acts}</div>`;
+  const tap = editable && !reorder ? ` role="button" tabindex="0" aria-label="Edit ${esc(g?gamingTitle(l):l.name)}" onclick="openLineEdit(${s.id},${l.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openLineEdit(${s.id},${l.id})}"` : '';
+  const desc = zLineDesc(l);
+  const times = g ? `<div class="zl-meta">Added ${timeStr(l.startTime||l.createdAt)}${l.physicalName?' · Station: '+esc(l.physicalName):''}</div>` : '';
+  const timer = '';
+  const acts = '';
+  const del = reorder ? `<button type="button" class="zdel" aria-label="Delete ${esc(l.name)}" onclick="deleteLine(${s.id},${l.id})"><span></span></button>` : '';
+  const mv = reorder ? `<div class="zmv"><button type="button" aria-label="Move up" onclick="moveLine(${s.id},${l.id},-1)" ${i===0?'disabled':''}>▲</button><button type="button" aria-label="Move down" onclick="moveLine(${s.id},${l.id},1)" ${i===n-1?'disabled':''}>▼</button></div>` : '';
+  return `<div class="zline" data-line="${l.id}">
+    <div class="zl-row">${del}<div class="zl-main"${tap}>
+      <div class="zl-l"><b>${esc(g?gamingTitle(l):l.name)}</b>${l.history&&l.history.length?`<span class="tag">edited ×${l.history.length}</span>`:''}${desc?`<div class="zl-desc">${desc}</div>`:''}${l.notes?`<div class="zl-desc">${esc(l.notes)}</div>`:''}</div>
+      <div class="zl-r"><b>${n2(l.total)}</b><div class="zl-qr">${zQtyRate(l)}</div></div></div>${mv}</div>
+    ${times}${timer}${acts}</div>`;
 }
 async function screenSession(){
   const s = await dbGet('bsessions', state.sessionId);
-  if(!s) return `<div class="empty">Session not found.</div><button class="btn" onclick="go('dashboard')">Back to Dashboard</button>`;
+  if(!s) return zhead('Start Session',{}) + `<div class="empty">Session not found.</div><button class="btn" onclick="go('dashboard')">Back to Dashboard</button>`;
   const editable = sesEditable(s);
-  const t = sessionTotals(s);
+  const t = sessionBill(s), f = finOf(s), st = state.settings, inv = s.inv||{};
+  const reorder = editable && !!state.reorder && s.lines.length>0;
   const dis = editable ? '' : 'disabled';
-  return `<div class="row" style="align-items:center;justify-content:space-between;margin-bottom:6px">
-      <button class="btn ghost sm" onclick="goBack('dashboard')">← Back</button>
-      <span class="pill ${s.status==='paid'?'green':s.status==='cancelled'?'red':s.status==='hold'?'amber':'neon'}">${STATUS_LABEL[s.status]}</span>
+  const g = s.lines.filter(l=>l.kind==='gaming');
+  const actual = g.reduce((a,l)=>a+Math.ceil(lineElapsedMs(l)/60000),0), billable = g.reduce((a,l)=>a+(Number(l.minutes)||0),0);
+  const invDate = inv.date || ymd(Date.now()), terms = inv.terms || st.dueTermsDefault || 'Due on receipt';
+  const nextNo = (st.invoicePrefix||'LVL-INV-')+String(st.nextInvoiceNo||1).padStart(6,'0');
+  const hasName = !!(s.customerName||'').trim(), hasMob = !!(s.customerMobile||'').trim();
+  const row = (label, inner, o)=>`<div class="zrow"${o&&o.attr?' '+o.attr:''}><span class="l${o&&o.req?' req':''}">${label}</span><span class="v">${inner}</span></div>`;
+  return zhead(editable?'Start Session':sesCode(s), editable ? {ok:`saveSession(${s.id})`, okLabel:'Save session'} : {back:1, fallback:'dashboard'}) + `
+    ${!editable ? `<div class="zcard" style="border:1px solid var(--amber)"><div class="zrow"><span class="l"><b>Read-only</b> · ${STATUS_LABEL[s.status]}</span><span class="v">${s.invoiceId?`<a href="#" onclick="openInvoice(${s.invoiceId});return false">View invoice ${esc(s.invoiceNumber||'')}</a>`:''}</span></div></div>` : ''}
+    <div class="zh2">Customer Details</div>
+    <div class="zcard">
+      <div class="zrow tap" ${editable?`role="button" tabindex="0" onclick="customerSheet(${s.id})" onkeydown="if(event.key==='Enter')customerSheet(${s.id})"`:''}><span class="l">${hasName?esc(s.customerName):'<span class="ph">Select or add customer (optional)</span>'}</span>${editable?ZI.chev:''}</div>
+      <div class="zrow tap" ${editable?`role="button" tabindex="0" onclick="customerSheet(${s.id})" onkeydown="if(event.key==='Enter')customerSheet(${s.id})"`:''}><span class="l">Contact</span><span class="v">${hasMob?esc(s.customerMobile):'<span class="ph">Add mobile</span>'}</span>${editable?ZI.chev:''}</div>
     </div>
-    <h2>${sesCode(s)}</h2>
-    ${!editable ? `<div class="card" style="border-color:var(--amber)"><b>Read-only</b><p class="muted" style="font-size:12px;margin:4px 0">This session is ${STATUS_LABEL[s.status].toLowerCase()}.${s.invoiceId?` <a href="#" onclick="openInvoice(${s.invoiceId});return false" style="color:var(--accent)">View invoice ${esc(s.invoiceNumber||'')}</a>`:''}</p></div>` : ''}
-    ${editable ? `<div class="grid2" style="margin-bottom:8px"><button class="btn primary" onclick="addGamingSegment(${s.id})">Add Gaming Segment</button><button class="btn" onclick="addLineModal(${s.id})">+ Add New Line</button></div>` : ''}
-    <div class="section-title">Bill (${s.lines.length} line${s.lines.length===1?'':'s'})</div>
-    ${s.lines.length ? s.lines.map(l=>lineCard(s,l,editable)).join('') : '<div class="empty" style="padding:16px">No lines yet. Add a gaming segment or an item.</div>'}
-    <div class="card">
-      <table>
-        <tr><td>Gaming</td><td class="right">${fmt(t.gaming)}</td></tr>
-        <tr><td>Accompanying persons</td><td class="right">${fmt(t.accompany)}</td></tr>
-        <tr><td>Overtime</td><td class="right">${fmt(t.overtime)}</td></tr>
-        <tr><td>Food & beverages</td><td class="right">${fmt(t.food)}</td></tr>
-        ${t.other?`<tr><td>Other</td><td class="right">${fmt(t.other)}</td></tr>`:''}
-        <tr class="total-row"><td>Current subtotal</td><td class="right">${fmt(t.subtotal)}</td></tr>
-      </table>
-      <div class="muted" style="font-size:11px;margin-top:6px">Discounts, tax and payment are applied at checkout.</div>
+    <div class="zsec"><span>Item Details</span>${editable&&s.lines.length?`<a href="#" id="zReorder" onclick="toggleReorder();return false">${reorder?'Done':'Remove or Reorder'}</a>`:''}</div>
+    <div class="zcard" id="zItems">
+      ${s.lines.length ? s.lines.map((l,i)=>zLine(s,l,editable,reorder,i,s.lines.length)).join('') : '<div class="zempty">No items yet. Tap “Add new line” to add gaming, food or drinks.</div>'}
+      ${editable?`<button type="button" class="zadd" id="zAdd" onclick="addLineModal(${s.id})"><span class="zplus">${ZI.plus}</span>Add new line</button>`:''}
+      <div class="ztot" id="zTot">
+        <div><span>Sub Total</span><b>${n2(t.subtotal)}</b></div>
+        <div><span>Discount(${n2(f.discountPct)})</span><b>(-) ${n2(t.discount)}</b></div>
+        ${st.taxEnabled?`<div><span>${esc(st.taxLabel||'Tax')}(${n2(st.taxRate)})</span><b>${n2(t.tax)}</b></div>`:''}
+        <div><span>Adjustment</span><b>${n2(t.adjustment)}</b></div>
+        <div><span>TCS</span><b>${n2(t.tcs)}</b></div>
+        <div><span>TDS</span><b>${n2(t.tds)}</b></div>
+        ${editable?`<div class="zedit"><a href="#" id="zFinEdit" onclick="finEditModal(${s.id});return false">Edit ${ZI.chev}</a></div>`:''}
+        <div class="zgrand"><span>Total ( INR )</span><b id="zGrand">${n2(t.grand)}</b></div>
+      </div>
     </div>
-    ${editable ? `<div class="grid2">
-      <button class="btn primary" onclick="openCheckout(${s.id})">Checkout</button>
-      <button class="btn" onclick="saveSession(${s.id})">Save</button>
-      <button class="btn" onclick="toggleHold(${s.id})">${s.status==='hold'?'Resume':'Hold'}</button>
-      <button class="btn" onclick="endAllModal(${s.id})">End Gaming</button>
-    </div>` : ''}
-    <div class="section-title">Session Details</div>
-    <div class="card">
-      <div class="grid2"><div><label>Session ID</label><div><b>${sesCode(s)}</b></div></div><div><label>Started</label><div>${new Date(s.startTime).toLocaleString('en-IN',{hour:'numeric',minute:'2-digit',day:'numeric',month:'short'})}</div></div></div>
-      <label>Group name (optional)</label><input id="sGroup" value="${esc(s.groupName)}" placeholder="e.g. Arun's group" ${dis} onchange="persistHeader(${s.id},true)">
-      <label>Notes (optional)</label><textarea id="sNotes" rows="2" ${dis} onchange="persistHeader(${s.id},true)">${esc(s.notes)}</textarea>
+    <div class="zh2">Invoice Details</div>
+    <div class="zcard">
+      ${row('Session', `${sesCode(s)} · started ${new Date(s.startTime).toLocaleString('en-IN',{hour:'numeric',minute:'2-digit',day:'numeric',month:'short'})}`)}
+      ${g.length?row('Gaming time', `Actual ${fmtDur(actual)} · Billable ${fmtDur(billable)}`):''}
+      ${row('Invoice Date', `<input id="sInvDate" type="date" value="${esc(invDate)}" ${dis} onchange="zbDue();persistHeader(${s.id},true)">`, {req:1})}
+      ${row('Terms', `<select id="sTerms" ${dis} onchange="zbDue();persistHeader(${s.id},true)">${Object.keys(DUE_TERMS).map(k=>`<option ${k===terms?'selected':''}>${k}</option>`).join('')}</select>`)}
+      ${row('Due Date', `<span id="sDue">${addDaysStr(invDate, DUE_TERMS[terms]||0)}</span>`)}
+      ${row('Invoice#', `${nextNo} ${editable?`<button type="button" class="zgear" aria-label="Invoice numbering settings" onclick="go('set_invoice')">${ZI.gear}</button>`:''}`, {req:1})}
+      ${row('Order#', `<input id="sOrder" value="${esc(inv.orderNo||'')}" placeholder="Tap to Enter" ${dis} onchange="persistHeader(${s.id},true)">`)}
+      ${row('Salesperson', `<input id="sSales" value="${esc(inv.salesperson!==undefined?inv.salesperson:(st.salesperson||''))}" placeholder="Tap to Select" ${dis} onchange="persistHeader(${s.id},true)">`)}
+      ${row('Group name', `<input id="sGroup" value="${esc(s.groupName)}" placeholder="Optional" ${dis} onchange="persistHeader(${s.id},true)">`)}
+      <div class="zrow col"><span class="l">Subject</span><textarea id="sSubject" rows="3" ${dis} onchange="persistHeader(${s.id},true)">${esc(inv.subject||'')}</textarea></div>
+      <div class="zrow col"><span class="l">Notes</span><textarea id="sNotes" rows="2" ${dis} onchange="persistHeader(${s.id},true)">${esc(s.notes)}</textarea></div>
     </div>
-    <div class="section-title">Customer <span class="muted" style="text-transform:none">(optional — can be added at checkout)</span></div>
-    <div class="card">
-      ${editable?`<button class="btn sm" style="margin-bottom:6px" onclick="selectCustomerModal(${s.id})">Select existing customer</button>`:''}
-      <label>Name</label><input id="sCustName" value="${esc(s.customerName)}" placeholder="Customer name" ${dis} onchange="persistHeader(${s.id},true)">
-      <label>Mobile number</label><input id="sCustMobile" value="${esc(s.customerMobile)}" inputmode="numeric" placeholder="10-digit mobile" ${dis} onchange="persistHeader(${s.id},true)">
-    </div>
-    ${editable ? `<button class="btn danger" onclick="cancelSessionModal(${s.id})">Cancel Session</button>` : ''}`;
+    ${editable ? `<div class="zacts">
+      <button type="button" class="zbtn primary" id="zCheckout" onclick="openCheckout(${s.id})">Checkout</button>
+      ${s.status==='hold'?`<button type="button" class="zbtn" onclick="toggleHold(${s.id})">Resume session</button>`:''}
+      <button type="button" class="zbtn danger" onclick="cancelSessionModal(${s.id})">Cancel Session</button></div>` : ''}`;
+}
+function zbDue(){
+  const d=document.getElementById('sInvDate'), t=document.getElementById('sTerms'), o=document.getElementById('sDue');
+  if(d&&t&&o&&d.value) o.textContent = addDaysStr(d.value, DUE_TERMS[t.value]||0);
+}
+function toggleReorder(){ state.reorder = !state.reorder; render(); }
+async function moveLine(sid, lid, dir){
+  await act(mutateSession(sid, s=>{ const i=s.lines.findIndex(x=>x.id===lid), k=i+dir; if(i<0||k<0||k>=s.lines.length) return false; const t=s.lines[i]; s.lines[i]=s.lines[k]; s.lines[k]=t; return true; }));
+  render();
 }
 
-/* ---- header / customer ---- */
+/* ---- header / invoice draft fields (customer has its own sheet) ---- */
 async function persistHeader(sid, quiet){
   const g=document.getElementById('sGroup'); if(!g) return true;
   const cur = await dbGet('bsessions', sid); if(!sesEditable(cur)) return true;
-  const raw = document.getElementById('sCustMobile').value.trim();
-  const mob = raw ? normMobile(raw) : '';
-  if(raw && !mob && !quiet){ tell('Enter a valid 10-digit Indian mobile number (for example 98765 43210), or leave it blank for now.'); return false; }
-  const vals = { groupName:g.value.trim(), notes:document.getElementById('sNotes').value.trim(), customerName:document.getElementById('sCustName').value.trim() };
-  try{ await mutateSession(sid, s=>{ Object.assign(s, vals); if(!raw || mob) s.customerMobile = mob; }); }catch(e){ tell(e.message); return false; }
-  return !(raw && !mob);
+  const val = id=>{ const e=document.getElementById(id); return e ? e.value : undefined; };
+  const vals = { groupName:g.value.trim(), notes:(val('sNotes')||'').trim() };
+  const inv = Object.assign({}, cur.inv||{});
+  if(val('sInvDate')) inv.date = val('sInvDate'); if(val('sTerms')) inv.terms = val('sTerms');
+  if(val('sOrder')!==undefined) inv.orderNo = val('sOrder').trim(); if(val('sSales')!==undefined) inv.salesperson = val('sSales').trim(); if(val('sSubject')!==undefined) inv.subject = val('sSubject').trim();
+  try{ await mutateSession(sid, s=>{ Object.assign(s, vals); s.inv = inv; }); }catch(e){ tell(e.message); return false; }
+  return true;
 }
 async function saveSession(sid){ if(await persistHeader(sid,false)){ showToast('Session saved — it stays open on the dashboard'); go('dashboard'); } }
-async function selectCustomerModal(sid){
+
+/* ---- customer: pick an existing one or type a new one (both optional) ---- */
+async function customerSheet(sid){
   await persistHeader(sid,true);
+  const s = await dbGet('bsessions', sid); if(!sesEditable(s)) return;
   const custs = (await dbAll('customers')).sort((a,b)=>(b.lastVisit||'').localeCompare(a.lastVisit||''));
   const rows = q=>{ q=q.trim().toLowerCase(); const f=custs.filter(c=>!q||c.name.toLowerCase().includes(q)||c.mobile.includes(q)).slice(0,30);
-    return f.length ? f.map(c=>`<div class="list-item" style="cursor:pointer" onclick="chooseCustomer(${sid},'${c.mobile}')"><span><b>${esc(c.name)}</b><br><span class="muted" style="font-size:12px">${c.mobile} · ${c.visits} visit(s)</span></span><span>${fmt(c.totalSpend)}</span></div>`).join('') : '<div class="muted">No matching customers. Type a name and mobile in the form instead — a new customer is created after checkout.</div>'; };
-  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Select Customer</h3>
+    return f.length ? f.map(c=>`<div class="list-item" style="cursor:pointer" role="button" tabindex="0" onclick="chooseCustomer(${sid},'${c.mobile}')"><span><b>${esc(c.name)}</b><br><span class="muted" style="font-size:12px">${c.mobile} · ${c.visits} visit(s)</span></span><span>${fmt(c.totalSpend)}</span></div>`).join('') : '<div class="muted" style="font-size:13px">No saved customers match. Type a name and mobile above — a new customer record is created when the invoice is finalized.</div>'; };
+  window.__scRows = rows;
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Customer</h3>
+    <label>Customer name</label><input id="csName" value="${esc(s.customerName)}" placeholder="Name (optional)">
+    <label>Mobile number</label><input id="csMobile" value="${esc(s.customerMobile)}" inputmode="numeric" placeholder="10-digit mobile (optional)">
+    <div class="grid2" style="margin-top:10px"><button class="btn" onclick="saveCustomerSheet(${sid},true)">Clear</button><button class="btn primary" id="csSave" onclick="saveCustomerSheet(${sid})">Save</button></div>
+    <div class="section-title">Existing customers</div>
     <input id="scSearch" placeholder="Search name or mobile" oninput="document.getElementById('scList').innerHTML=window.__scRows(this.value)">
     <div id="scList" style="margin-top:8px">${rows('')}</div>`);
-  window.__scRows = rows;
+}
+async function saveCustomerSheet(sid, clear){
+  const name = clear ? '' : document.getElementById('csName').value.trim();
+  const raw = clear ? '' : document.getElementById('csMobile').value.trim();
+  const mob = raw ? normMobile(raw) : '';
+  if(raw && !mob){ tell('Enter a valid 10-digit Indian mobile number (for example 98765 43210), or leave it blank.'); return; }
+  let nm = name;
+  if(mob && !nm){ const c = await dbGet('customers', mob); if(c) nm = c.name; }
+  const ok = await act(mutateSession(sid, s=>{ s.customerName=nm; s.customerMobile=mob; return true; }));
+  if(ok){ closeModal(); render(); }
 }
 async function chooseCustomer(sid, mobile){
   const c = await dbGet('customers', mobile); if(!c) return;
   await act(mutateSession(sid, s=>{ s.customerName=c.name; s.customerMobile=c.mobile; })); closeModal(); render();
 }
+function selectCustomerModal(sid){ return customerSheet(sid); }
 
-/* ============ POS picker (full screen "Add New Line") ============ */
+/* ---- financial summary: Discount % (gaming only) · Adjustment · TCS · TDS ---- */
+async function finEditModal(sid){
+  const s = await dbGet('bsessions', sid); if(!sesEditable(s)) return;
+  const f = finOf(s), discOk = can('discount');
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Edit totals</h3>
+    <label>Discount % — applies to gaming lines only ${discOk?'':'<span class="muted">(needs permission)</span>'}</label><input id="feDisc" type="number" inputmode="decimal" min="0" max="100" step="any" value="${f.discountPct}" ${discOk?'':'disabled'}>
+    <label>Adjustment (₹, whole rupees; use − to reduce)</label><input id="feAdj" type="number" inputmode="numeric" step="1" value="${f.adjustment}">
+    <div class="grid2"><div><label>TCS %</label><input id="feTcs" type="number" inputmode="decimal" min="0" max="100" step="any" value="${f.tcsPct}"></div><div><label>TDS % (deducted)</label><input id="feTds" type="number" inputmode="decimal" min="0" max="100" step="any" value="${f.tdsPct}"></div></div>
+    <div class="muted" style="font-size:11px;margin-top:6px">Total = Sub Total − Discount + Tax + Adjustment + TCS − TDS. Leave everything at 0 for a normal bill.</div>
+    <button class="btn primary" style="margin-top:12px" id="feSave" onclick="saveFinEdit(${sid})">Save</button>`);
+}
+async function saveFinEdit(sid){
+  const num = id=>Number(document.getElementById(id).value||0);
+  const fin = { discountPct:num('feDisc'), adjustment:Math.round(num('feAdj')), tcsPct:num('feTcs'), tdsPct:num('feTds') };
+  if(![fin.discountPct,fin.tcsPct,fin.tdsPct].every(v=>v>=0&&v<=100) || !isFinite(fin.adjustment)){ tell('Percentages must be between 0 and 100 and the adjustment must be a number.'); return; }
+  const cur = await dbGet('bsessions', sid); if(!cur) return;
+  if(!can('discount') && fin.discountPct!==finOf(cur).discountPct){ tell('Changing the discount needs permission.'); return; }
+  const t = billTotals(cur.lines, fin.discountPct, state.settings, fin);
+  if(t.grand<0){ tell('These adjustments would make the total negative.'); return; }
+  const ok = await act(mutateSession(sid, s=>{ s.fin = fin; return true; }));
+  if(ok){ closeModal(); render(); }
+}
+
+/* ============ Items list ("Add new line") ============ */
 const POS_AFTER = ['Accompanying Persons','Food','Beverages','Combos','Overtime Charges','Other Items'];
 function productCat(p){ return ({food:'Food',beverage:'Beverages',combo:'Combos',overtime:'Overtime Charges',accompany:'Accompanying Persons'})[p.type] || 'Other Items'; }
-let __pk = null;   // data for the open picker (setups, products, bill snapshot); selection lives in state.pick
 async function openPicker(sid, cat){
   const s = await dbGet('bsessions', sid);
   if(!s){ tell('This session no longer exists.'); return; }
   if(!sesEditable(s)){ tell(`This session is ${STATUS_LABEL[s.status]} and can't be edited.`); return; }
   await persistHeader(sid, true);
-  state.billEdSid = null;
-  state.pick = { sid, q:'', cat:cat||'all', sel:{}, acc:{ persons:0, minutes:state.settings.accompanyDefaultMinutes||60, free:false }, busy:false, lock:false };
+  state.billEdSid = null; state.ii = null;
+  state.pick = { sid, q:'', cat:cat||'all' };
   go('picker');
 }
 function addLineModal(sid){ return openPicker(sid,'all'); }
 function addGamingSegment(sid){ return openPicker(sid,'__gaming'); }
-function pkAccRate(){ const p=(__pk&&__pk.products||[]).find(x=>x.type==='accompany'); return p ? p.price : 50; }
-function pkAccAmount(){ const a=state.pick.acc; return a.free ? 0 : Math.round(a.persons*pkAccRate()*(Number(a.minutes)||0)/60); }
-function pkOnBill(key){
-  const s=__pk.s; if(!s) return 0;
-  if(key.startsWith('g:')){ const [, sidr, pl]=key.split(':'); return s.lines.filter(l=>l.kind==='gaming' && l.stationId===Number(sidr) && l.players===Number(pl)).length; }
-  if(key==='acc') return s.lines.filter(l=>l.kind==='accompany').reduce((a,l)=>a+l.qty,0);
-  const id=Number(key.slice(2)); return s.lines.filter(l=>(l.kind==='item'||l.kind==='overtime') && l.itemId===id).reduce((a,l)=>a+l.qty,0);
+const PK_CHIPS = [['all','All'],['__gaming','Gaming'],['food','Food'],['beverage','Beverages'],['combo','Combos'],['other','Other']];
+function catalogEntries(products, setups){
+  const out = [];
+  setups.slice().sort((a,b)=>(a.order||0)-(b.order||0)).forEach(st=>setupVariants(st).forEach(v=>out.push({ key:`g:${st.id}:${v.players}`, name:v.name, price:v.hr, group:'__gaming', sub:st.tv||'' })));
+  products.filter(p=>p.active!==false).forEach(p=>out.push({ key:'p:'+p.id, name:p.name, price:p.price, group:({food:'food',beverage:'beverage',combo:'combo'})[p.type]||'other', sub:p.type==='combo'?(p.desc||''):'' }));
+  return out.sort((a,b)=>a.name.localeCompare(b.name,'en',{sensitivity:'base',numeric:true}));
 }
-function pkTotals(){
-  const pk=state.pick; let types=0, units=0, amount=0; const items=[];
-  Object.entries(pk.sel).forEach(([pid,q])=>{ if(q>0){ const p=__pk.products.find(x=>x.id===Number(pid)); if(p){ types++; units+=q; amount+=Math.round(p.price*q); items.push({p,qty:q}); } } });
-  if(pk.acc.persons>0){ types++; units+=pk.acc.persons; amount+=pkAccAmount(); }
-  return { types, units, amount, items };
+function pkRowsHtml(list, pk){
+  const q=(pk.q||'').trim().toLowerCase();
+  const f = list.filter(e=>q ? (e.name+' '+e.sub).toLowerCase().includes(q) : (pk.cat==='all' || e.group===pk.cat));
+  if(!f.length) return '<div class="zempty">No matching items.</div>';
+  return f.map(e=>`<div class="zitem" role="button" tabindex="0" data-key="${esc(e.key)}" onclick="openItemNew('${e.key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openItemNew('${e.key}')}"><span class="zi-n">${esc(e.name)}${e.sub?`<small>${esc(e.sub)}</small>`:''}</span><span class="zi-p">₹${n2(e.price)}</span></div>`).join('');
 }
-function pkCategoryList(){
-  const gcats=[]; __pk.setups.slice().sort((a,b)=>(a.order||0)-(b.order||0)).forEach(st=>{ if(!gcats.includes(st.category)) gcats.push(st.category); });
-  if(!gcats.includes('Gaming — Gaming PCs')) gcats.push('Gaming — Gaming PCs');   // always offered, so a PC added later has a place
-  return [...gcats, ...POS_AFTER];
-}
-function pkChipLabel(c){ return c.replace(/^Gaming — /,'').replace('Accompanying Persons','Accompanying').replace('Overtime Charges','Overtime'); }
-function pkRowsFor(cat){
-  const pk=state.pick; const q=pk.q.trim().toLowerCase(); const m=t=>!q||t.toLowerCase().includes(q); let h='';
-  if(cat.startsWith('Gaming — ')){
-    __pk.setups.filter(st=>st.category===cat).sort((a,b)=>(a.order||0)-(b.order||0)).forEach(st=>{
-      setupVariants(st).forEach(v=>{ if(!m(v.name+' '+(st.tv||'')+' '+cat)) return; const key=`g:${st.id}:${v.players}`; const n=pkOnBill(key);
-        h+=`<div class="posrow" id="pr-${key}"><div style="min-width:0"><div class="nm">${esc(v.name)}</div><div class="sub">${esc(st.tv||st.console)}</div><div class="sub">${fmt(v.hr)}/hour · ${fmt(v.half)}/30 min</div></div>
-          <div style="text-align:right"><div class="sub" id="ob-${key}">${n?`On bill ×${n}`:''}</div><button class="btn sm primary" aria-label="Add ${esc(v.name)}" onclick="pkAddGaming(${st.id},${v.players})">Add</button></div></div>`; });
-    });
-    return h;
-  }
-  if(cat==='Accompanying Persons'){
-    if(!m('accompanying persons parent free')) return '';
-    const a=pk.acc, rate=pkAccRate(), n=pkOnBill('acc');
-    return `<div class="posrow ${a.persons>0?'sel':''}" id="pr-acc" style="display:block">
-      <div class="row" style="justify-content:space-between;align-items:center"><div><div class="nm">Accompanying Persons</div><div class="sub">${fmt(rate)}/person/hour</div></div><div class="sub" id="ob-acc">${n?`On bill ×${n}`:''}</div></div>
-      <div class="row" style="align-items:center;justify-content:space-between;margin-top:8px"><span class="sub">Persons</span><div class="stepper"><button type="button" aria-label="Fewer persons" onclick="pkAccSet('persons',${Math.max(0,a.persons-1)})">−</button><div class="q" id="acc-q">${a.persons}</div><button type="button" aria-label="More persons" onclick="pkAccSet('persons',${a.persons+1})">+</button></div></div>
-      <div style="margin-top:8px"><span class="sub">Duration (minutes)</span><div class="row" style="margin-top:4px;align-items:center"><input id="accMin" type="number" min="1" step="1" value="${a.minutes}" oninput="pkAccSet('minutes',this.value,true)" style="max-width:110px"><div>${[30,60,90,120].map(x=>`<span class="chip" style="margin:0 0 0 6px" onclick="pkAccSet('minutes',${x})">${x}</span>`).join('')}</div></div></div>
-      <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input id="accFree" type="checkbox" ${a.free?'checked':''} onchange="pkAccSet('free',this.checked)"> Free — parent accompanying child</label>
-      <div class="sub" id="acc-est" style="margin-top:6px">${pkAccEstimate()}</div></div>`;
-  }
-  const ps = __pk.products.filter(p=>productCat(p)===cat && p.type!=='accompany').sort((a,b)=>(a.cat||'').localeCompare(b.cat||'')||a.name.localeCompare(b.name));
-  ps.forEach(p=>{ if(!m(p.name+' '+cat)) return; const key='p:'+p.id; const n=pkOnBill(key);
-    if(p.type==='combo'){
-      h+=`<div class="posrow" id="pr-${key}"><div style="min-width:0"><div class="nm">${esc(p.name)}</div><div class="sub">${esc(p.desc||'')}</div><div class="sub">${fmt(p.price)} / ${esc(p.unit||'combo')} · pick 2 drinks</div></div><div style="text-align:right"><div class="sub" id="ob-${key}">${n?`On bill ×${n}`:''}</div><button class="btn sm primary" onclick="pkAddCombo(${p.id})">Add</button></div></div>`;
-    } else {
-      const q=pk.sel[p.id]||0;
-      h+=`<div class="posrow ${q>0?'sel':''}" id="pr-${key}"><div style="min-width:0"><div class="nm">${esc(p.name)}</div><div class="sub">${fmt(p.price)} / ${esc(p.type==='overtime'?overtimeUnitLabel(state.settings):(p.unit||'pc'))}</div><div class="sub" id="ob-${key}">${n?`On bill: ${n}`:''}</div></div>
-        <div class="stepper"><button type="button" aria-label="Remove one ${esc(p.name)}" onclick="pkStep(${p.id},-1)">−</button><div class="q" id="pq-${p.id}">${q}</div><button type="button" aria-label="Add one ${esc(p.name)}" onclick="pkStep(${p.id},1)">+</button></div></div>`;
-    }
-  });
-  return h;
-}
-function pkAccEstimate(){ const a=state.pick.acc; if(a.persons<=0) return 'Select the number of persons to see the charge.'; return a.free ? `${a.persons} persons · ${fmtDur(a.minutes)} · free (parent)` : `${a.persons} persons × ${fmtDur(a.minutes)} × ${fmt(pkAccRate())}/h = <b>${fmt(pkAccAmount())}</b>`; }
-function pkListHtml(){
-  const pk=state.pick; const cats=pkCategoryList(); let out='';
-  const gaming = pk.cat==='__gaming';
-  cats.forEach(cat=>{
-    if(!pk.q.trim()){ if(pk.cat==='__gaming' ? !cat.startsWith('Gaming — ') : (pk.cat!=='all' && pk.cat!==cat)) return; }
-    const rows=pkRowsFor(cat); if(!rows) return;
-    out+=`<div class="section-title">${esc(cat)}</div>`+rows;
-  });
-  if(!out) out='<div class="empty">No matching items.</div>';
-  if(can('createItem')) out+=`<button class="btn sm" style="margin-top:8px" onclick="itemEditModal(null,${pk.sid})">+ Create new item</button>`;
-  return out;
-}
-function pkChipsHtml(){ const pk=state.pick; const chips=[['all','All'],['__gaming','Gaming'],...pkCategoryList().map(c=>[c,pkChipLabel(c)])]; return chips.map(([k,l])=>`<span class="chip ${pk.cat===k&&!pk.q.trim()?'sel':''}" onclick="pkCat('${k.replace(/'/g,"\\'")}')">${esc(l)}</span>`).join(''); }
-function pkBarHtml(){
-  const pk=state.pick, t=pkTotals(), sub=sessionTotals(__pk.s).subtotal;
-  const sum = t.types ? `<b>${t.types} item type${t.types===1?'':'s'} · ${t.units} unit${t.units===1?'':'s'} · ${fmt(t.amount)}</b><div class="muted" style="font-size:11px">selected, not yet on the bill</div>` : `<b>Nothing selected</b><div class="muted" style="font-size:11px">Bill subtotal ${fmt(sub)}</div>`;
-  return `<div class="inner stack"><div class="sum" id="pkSum">${sum}</div><button class="btn" style="flex:1" onclick="pkDone()">Done</button><button class="btn primary" style="flex:2" id="pkAddBtn" onclick="pkCommit()" ${(!t.types||pk.busy)?'disabled':''}>${pk.busy?'Adding…':'Add Selected Items'}</button></div>`;
-}
-function pkBar(){ const el=document.getElementById('pkBar'); if(el) el.innerHTML=pkBarHtml(); }
-function pkList(){ const el=document.getElementById('pkList'); if(el) el.innerHTML=pkListHtml(); const c=document.getElementById('pkChips'); if(c) c.innerHTML=pkChipsHtml(); }
+function pkChipsHtml(){ const pk=state.pick; return PK_CHIPS.map(([k,l])=>`<button type="button" class="zchip ${pk.cat===k&&!(pk.q||'').trim()?'sel':''}" onclick="pkCat('${k}')">${l}</button>`).join(''); }
+let __catalog = [];
 async function screenPicker(){
-  const pk = state.pick; if(!pk) return `<div class="empty">Nothing to show.</div><button class="btn" onclick="go('dashboard')">Back</button>`;
+  const pk = state.pick; if(!pk) return zhead('Items',{back:1,fallback:'dashboard'}) + `<div class="zempty">Nothing to show.</div><button class="btn" onclick="go('dashboard')">Back</button>`;
   const s = await dbGet('bsessions', pk.sid);
-  if(!sesEditable(s)){ state.pick=null; return `<div class="empty">This session is no longer open for editing.</div><button class="btn" onclick="go('dashboard')">Back</button>`; }
-  const products = (await dbAll('products')).filter(p=>p.active!==false);
-  const setups = (await dbAll('stations')).filter(st=>st.active!==false);
-  __pk = { s, products, setups };
-  return `<div class="pos-head"><div class="row" style="align-items:center;justify-content:space-between;margin-bottom:6px"><button class="btn ghost sm" onclick="pkDone()">← ${esc(sesCode(s))}</button><b>Add New Line</b><span></span></div>
-      <input id="pkSearch" type="search" placeholder="Search gaming, food, drinks…" value="${esc(pk.q)}" oninput="pkSearch(this.value)">
-      <div class="catbar" id="pkChips">${pkChipsHtml()}</div></div>
-    <div id="pkList">${pkListHtml()}</div>
-    <div class="footbar" id="pkBar">${pkBarHtml()}</div>`;
+  if(!sesEditable(s)){ state.pick=null; return zhead('Items',{back:1,fallback:'dashboard'}) + `<div class="zempty">This session is no longer open for editing.</div><button class="btn" onclick="go('dashboard')">Back</button>`; }
+  __catalog = catalogEntries(await dbAll('products'), (await dbAll('stations')).filter(st=>st.active!==false));
+  return zhead('Items', {back:1, fallback:'dashboard', plus: can('createItem')?`itemEditModal(null,${pk.sid})`:'', plusLabel:'Create new item'}) +
+    `<input id="pkSearch" class="zsearch" type="search" placeholder="Search items" value="${esc(pk.q||'')}" oninput="pkSearch(this.value)" aria-label="Search items">
+     <div class="zchips" id="pkChips">${pkChipsHtml()}</div>
+     <div class="zcard zlist" id="pkList">${pkRowsHtml(__catalog, pk)}</div>`;
 }
-function pkSearch(v){ state.pick.q=v; pkList(); }
-function pkCat(c){ state.pick.cat=c; state.pick.q=''; const i=document.getElementById('pkSearch'); if(i) i.value=''; pkList(); window.scrollTo(0,0); }
-function pkStep(pid, d){
-  const pk=state.pick; const q=Math.max(0,(pk.sel[pid]||0)+d); if(q) pk.sel[pid]=q; else delete pk.sel[pid];
-  const el=document.getElementById('pq-'+pid); if(el) el.textContent=q;
-  const row=document.getElementById('pr-p:'+pid); if(row) row.classList.toggle('sel', q>0);
-  pkBar();
+function pkSearch(v){ state.pick.q=v; document.getElementById('pkList').innerHTML=pkRowsHtml(__catalog,state.pick); document.getElementById('pkChips').innerHTML=pkChipsHtml(); }
+function pkCat(c){ state.pick.cat=c; state.pick.q=''; const i=document.getElementById('pkSearch'); if(i) i.value=''; document.getElementById('pkList').innerHTML=pkRowsHtml(__catalog,state.pick); document.getElementById('pkChips').innerHTML=pkChipsHtml(); }
+
+/* ============ Item Information ============ */
+async function iiBuild(key, keep){
+  const [setups, products] = [await dbAll('stations'), await dbAll('products')];
+  const st0 = state.settings;
+  const ii = { sid:(state.pick&&state.pick.sid)||state.sessionId, lid:null, key, desc:(keep&&keep.desc)||'', free:false, drinks:['',''], minutes:st0.accompanyDefaultMinutes||60, discountPct:0 };
+  if(key.startsWith('g:')){
+    const [, sidr, pl] = key.split(':'); const st = setups.find(x=>x.id===Number(sidr)); if(!st) throw new Error('That gaming setup no longer exists.');
+    const r = st.rates[Number(pl)] || [0,0];
+    Object.assign(ii, { kind:'gaming', stationId:st.id, players:Number(pl), name:variantName(st,Number(pl)), rate:r[0], rate0:r[0], half0:r[1], qty:(st0.defaultGamingMinutes||60)/60, unit:'hour' });
+  } else {
+    const p = products.find(x=>x.id===Number(key.slice(2))); if(!p) throw new Error('That item no longer exists.');
+    Object.assign(ii, { kind:p.type==='overtime'?'overtime':p.type==='accompany'?'accompany':p.type==='combo'?'combo':'item', itemId:p.id, name:p.name, rate:p.price, rate0:p.price, qty:1,
+      unit:p.type==='overtime'?overtimeUnitLabel(st0):(p.unit||'pc'), bucket:bucketForType(p.type), cat:p.cat, comboDesc:p.desc||'' });
+  }
+  if(keep && keep.qty && keep.kind===ii.kind) ii.qty = keep.qty;
+  return ii;
 }
-function pkAccSet(k, v, typing){
-  const a=state.pick.acc;
-  if(k==='persons') a.persons=Math.max(0,Math.min(20,Math.round(Number(v)||0)));
-  else if(k==='minutes'){ a.minutes=Math.max(0,Math.round(Number(v)||0)); const i=document.getElementById('accMin'); if(i && !typing) i.value=a.minutes; }
-  else if(k==='free') a.free=!!v;
-  const q=document.getElementById('acc-q'); if(q) q.textContent=a.persons;
-  const row=document.getElementById('pr-acc'); if(row) row.classList.toggle('sel', a.persons>0);
-  const est=document.getElementById('acc-est'); if(est) est.innerHTML=pkAccEstimate();
-  if(k==='persons'){ const btns=row&&row.querySelectorAll('.stepper button'); if(btns&&btns.length===2){ btns[0].setAttribute('onclick',`pkAccSet('persons',${Math.max(0,a.persons-1)})`); btns[1].setAttribute('onclick',`pkAccSet('persons',${a.persons+1})`); } }
-  pkBar();
+async function openItemNew(key){
+  try{ state.ii = await iiBuild(key); }catch(e){ tell(e.message); return; }
+  go('itemInfo');
 }
-async function pkRefresh(){ __pk.s = await dbGet('bsessions', state.pick.sid); pkList(); pkBar(); }
-async function pkAddGaming(setupId, players){
-  const pk=state.pick; if(pk.lock) return; pk.lock=true; setTimeout(()=>{ if(state.pick) state.pick.lock=false; }, 350);
-  const st=__pk.setups.find(x=>x.id===setupId); if(!st) return;
-  const ok = await act(mutateSession(pk.sid, s=>{ computeLine(makeGamingLine(s, st, players, {})); return true; }));
-  if(ok){ showToast('Added '+variantName(st,players)); await pkRefresh(); }
+async function openLineEdit(sid, lid){
+  const s = await dbGet('bsessions', sid);
+  if(!sesEditable(s)){ tell(s?`This session is ${STATUS_LABEL[s.status]} and can't be edited.`:'Session not found.'); return; }
+  const l = s.lines.find(x=>x.id===lid); if(!l){ tell('This line no longer exists — it may have been removed on another device.'); render(); return; }
+  const g = l.kind==='gaming';
+  state.ii = { sid, lid, key:'', kind: g?'gaming':l.kind==='accompany'?'accompany':l.kind==='overtime'?'overtime':(l.included&&l.included.length?'combo':'item'), name:g?gamingTitle(l):l.name, desc:l.notes||'',
+    qty: g ? (l.minutes||0)/60 : l.qty, rate: g ? l.hr : l.unitPrice, rate0: g ? l.hr : l.unitPrice, half0:l.half, minutes:l.minutes||60, free:!!l.free, drinks:(l.included||['','']).slice(0,2), discountPct:l.discountPct||0, unit:l.unit||'', stationId:l.stationId, players:l.players };
+  go('itemInfo');
 }
+function iiTemp(){
+  const ii = state.ii; const q = Number(ii.qty)||0, r = Number(ii.rate)||0;
+  if(ii.kind==='gaming') return computeLine({ kind:'gaming', minutes:Math.round(q*60), hr:r, half:ii.half0&&ii.rate0?Math.round(ii.half0*r/ii.rate0):Math.round(r/2), discountPct:ii.discountPct });
+  if(ii.kind==='accompany') return computeLine({ kind:'accompany', qty:q, unitPrice:r, minutes:Number(ii.minutes)||0, free:ii.free, discountPct:ii.discountPct });
+  return computeLine({ kind:'item', qty:q, unitPrice:r, discountPct:ii.discountPct });
+}
+function iiRefresh(){ const el=document.getElementById('iiAmt'); if(el && state.ii) el.textContent=n2(iiTemp().total); const h=document.getElementById('iiHint'); if(h) h.innerHTML=iiHintHtml(); }
+function iiHintHtml(){
+  const ii=state.ii; if(!ii) return '';
+  if(ii.kind==='gaming'){ const m=Math.round((Number(ii.qty)||0)*60); return `${fmtDur(m)} billed${ii.lid?'':' · the timer starts when you save'}`; }
+  if(ii.kind==='accompany') return ii.free ? 'Free — parent accompanying child' : `${ii.qty||0} person(s) × ${fmtDur(Number(ii.minutes)||0)}`;
+  return '';
+}
+function iiSet(k, v){ if(!state.ii) return; if(k==='qty'||k==='rate') state.ii[k] = v; else state.ii[k]=v; iiRefresh(); }
+function iiStep(d){
+  const ii=state.ii; const step = ii.kind==='gaming' ? 0.5 : 1; let q = (Number(ii.qty)||0)+d*step; if(q<=0) q = step>=1?1:0.5;
+  ii.qty = Math.round(q*100)/100; const e=document.getElementById('iiQty'); if(e) e.value=ii.qty; iiRefresh();
+}
+function iiClear(){ const ii=state.ii; ii.qty=''; const e=document.getElementById('iiQty'); if(e){ e.value=''; e.focus(); } iiRefresh(); }
+async function screenItemInfo(){
+  const ii = state.ii; if(!ii) return zhead('Item Information',{back:1,fallback:'dashboard'}) + `<div class="zempty">Nothing to edit.</div><button class="btn" onclick="go('dashboard')">Back</button>`;
+  const rateOk = can('editPrice'), drinks = ii.kind==='combo' ? (await dbAll('products')).filter(p=>p.type==='beverage'&&p.active!==false).map(p=>p.name) : [];
+  const sel = (i)=>`<div class="zrow"><span class="l req">Drink ${i+1}</span><span class="v"><select id="iiD${i}" onchange="state.ii.drinks[${i}]=this.value">${['',...drinks].map(d=>`<option value="${esc(d)}" ${ii.drinks[i]===d?'selected':''}>${d?esc(d):'Select'}</option>`).join('')}</select></span></div>`;
+  const hrs = ii.kind==='gaming';
+  return zhead('Item Information', {back:1, fallback:'dashboard', ok:'iiSave()', okLabel:ii.lid?'Update line':'Add line'}) + `
+    <div class="zcard">
+      <div class="zrow ${ii.lid?'':'tap'}" ${ii.lid?'':`role="button" tabindex="0" onclick="iiPickModal()" onkeydown="if(event.key==='Enter')iiPickModal()"`}><span class="l">Item</span><span class="v">${esc(ii.name)}</span>${ii.lid?'':ZI.chev}</div>
+      <div class="zrow col"><span class="l">Description</span><textarea id="iiDesc" rows="4" placeholder="Optional" oninput="iiSet('desc',this.value)">${esc(ii.desc)}</textarea></div>
+      <div class="zrow"><span class="l req">${hrs?'Quantity (hours)':ii.kind==='accompany'?'Quantity (persons)':'Quantity'}</span>
+        <span class="v zqty"><button type="button" class="zstep" aria-label="Decrease quantity" onclick="iiStep(-1)">−</button><input id="iiQty" inputmode="decimal" value="${esc(ii.qty)}" oninput="iiSet('qty',this.value)" aria-label="Quantity"><button type="button" class="zstep" aria-label="Increase quantity" onclick="iiStep(1)">+</button><button type="button" class="zclr" aria-label="Clear quantity" onclick="iiClear()">${ZI.clear}</button></span></div>
+      ${ii.kind==='accompany'?`<div class="zrow"><span class="l">Duration (minutes)</span><span class="v"><input id="iiMin" inputmode="numeric" value="${esc(ii.minutes)}" oninput="iiSet('minutes',this.value)"></span></div>
+        <div class="zrow"><label class="l" for="iiFree">Free — parent accompanying child</label><span class="v"><input id="iiFree" type="checkbox" ${ii.free?'checked':''} onchange="iiSet('free',this.checked)"></span></div>`:''}
+      ${ii.kind==='combo'?sel(0)+sel(1):''}
+      <div class="zrow"><span class="l req">Rate (INR)${hrs?' / hour':ii.kind==='accompany'?' / person / hour':''}</span><span class="v"><input id="iiRate" inputmode="decimal" value="${n2(ii.rate)}" ${rateOk?'':'disabled'} onfocus="this.select()" oninput="iiSet('rate',this.value)" aria-label="Rate"></span></div>
+    </div>
+    <div class="zcard"><div class="zrow"><span class="l">Amount</span><span class="v"><b id="iiAmt">${n2(iiTemp().total)}</b></span></div><div class="zhint" id="iiHint">${iiHintHtml()}</div>${rateOk?'':'<div class="zhint">Changing the price needs permission.</div>'}</div>
+    ${ii.lid&&hrs?`<button type="button" class="zbtn" onclick="iiAdvanced()">Station, start/end time, players…</button>`:''}`;
+}
+async function iiAdvanced(){ const ii=state.ii; if(!ii) return; state.ii=null; await openSession(ii.sid); editLineModal(ii.sid, ii.lid); }
+async function iiPickModal(){
+  const list = catalogEntries(await dbAll('products'), (await dbAll('stations')).filter(st=>st.active!==false));
+  window.__iiList = list;
+  const rows = q=>{ q=q.trim().toLowerCase(); const f=list.filter(e=>!q||e.name.toLowerCase().includes(q)); return f.map(e=>`<div class="list-item" style="cursor:pointer" role="button" tabindex="0" onclick="iiSwitch('${e.key}')"><span>${esc(e.name)}</span><b>₹${n2(e.price)}</b></div>`).join('') || '<div class="muted">No matching items.</div>'; };
+  window.__iiRows = rows;
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Select item</h3><input id="iiSearch" placeholder="Search items" oninput="document.getElementById('iiList').innerHTML=window.__iiRows(this.value)"><div id="iiList" style="margin-top:8px">${rows('')}</div>`);
+}
+async function iiSwitch(key){
+  const cur = state.ii; try{ state.ii = Object.assign(await iiBuild(key, cur), { sid:cur.sid }); }catch(e){ tell(e.message); return; }
+  closeModal(); render();
+}
+async function iiSave(){
+  const ii = state.ii; if(!ii || ii.saving) return;
+  const rd = id=>{ const e=document.getElementById(id); return e ? e.value : ''; };
+  const qty = Number(String(rd('iiQty')).replace(',','.')), rate = Number(String(rd('iiRate')).replace(',','.')), desc = rd('iiDesc').trim();
+  if(!(qty>0)){ tell('Enter a quantity greater than zero.'); return; }
+  if(!(rate>=0) || rd('iiRate')===''){ tell('Enter a valid rate.'); return; }
+  if(!can('editPrice') && Math.abs(rate-(ii.rate0||0))>0.0001){ tell('Changing the price needs permission.'); return; }
+  let minutes = 0;
+  if(ii.kind==='gaming'){ minutes = Math.round(qty*60); const err = validateMinutes(minutes, durationPolicy()); if(err){ tell(err); return; } }
+  if(ii.kind==='accompany'){ minutes = Math.round(Number(rd('iiMin'))); const err = validateMinutes(minutes, durationPolicy()); if(err){ tell(err); return; } if(!Number.isInteger(qty)){ tell('Enter a whole number of persons.'); return; } }
+  if(ii.kind==='combo' && !(ii.lid ? true : (ii.drinks[0]&&ii.drinks[1]))){ tell('Choose both drinks for this combo.'); return; }
+  const free = ii.kind==='accompany' && !!(document.getElementById('iiFree')||{}).checked;
+  const half = ii.half0&&ii.rate0 ? Math.round(ii.half0*rate/ii.rate0) : Math.round(rate/2);
+  ii.saving = true; const sid = ii.sid, lid = ii.lid;
+  try{
+    const st = ii.kind==='gaming' && !lid ? await dbGet('stations', ii.stationId) : null;
+    const prod = ii.itemId ? await dbGet('products', ii.itemId) : null;
+    const ok = await act(mutateSession(sid, s=>{
+      if(lid){
+        const l = s.lines.find(x=>x.id===lid); if(!l) throw new Error('This line was removed — nothing was changed.');
+        const patch = ii.kind==='gaming' ? { minutes, hr:rate, half, notes:desc } : ii.kind==='accompany' ? { qty, minutes, unitPrice:rate, free, notes:desc } : { qty, unitPrice:rate, notes:desc };
+        logHist(l, patch, ['minutes','hr','half','unitPrice','qty','free']);
+        Object.assign(l, patch); computeLine(l); return true;
+      }
+      let l;
+      if(ii.kind==='gaming'){ if(!st) throw new Error('That gaming setup no longer exists.'); l = makeGamingLine(s, st, ii.players, { minutes, hr:rate, half, notes:desc }); }
+      else if(ii.kind==='accompany'){ l = addAccompanyLine(s, prod||{name:ii.name,cat:ii.cat,id:ii.itemId,price:rate}, qty, minutes, free); l.unitPrice = rate; l.notes = desc; }
+      else if(ii.kind==='overtime'){ l = newLine(s,'overtime',{ name:ii.name, category:ii.cat, itemId:ii.itemId, qty, unit:ii.unit, unitPrice:rate, bucket:'overtime', notes:desc }); }
+      else { l = newLine(s,'item',{ name:ii.name, category:ii.cat, itemId:ii.itemId, qty, unit:ii.unit||'pc', unitPrice:rate, bucket:ii.bucket||'other', included:ii.kind==='combo'?[ii.drinks[0],ii.drinks[1]]:null, notes:desc }); }
+      computeLine(l); return true;
+    }));
+    if(ok){ state.ii = null; showToast(lid?'Line updated':'Added '+ii.name); await openSession(sid); }
+  } finally { if(state.ii) state.ii.saving = false; }
+}
+
 function makeGamingLine(s, st, players, extra){
   const r = st.rates[players] || [0,0]; const now = Date.now();
   return newLine(s,'gaming', Object.assign({ name:variantName(st,players), category:st.category||'Gaming', setupLabel:setupLabel(st), stationId:st.id, console:st.console, tv:st.tv||'', players,
@@ -1252,39 +1478,6 @@ function addItemLine(s, p, included, qty){
 }
 function addAccompanyLine(s, p, persons, minutes, free){
   return newLine(s,'accompany',{name:p.name,category:p.cat,itemId:p.id,qty:persons,unit:'person/hour',unitPrice:p.price,minutes,free:!!free,bucket:'accompany'});
-}
-/* Add Selected Items: one atomic change; selection is only cleared after it succeeds; repeated taps are ignored */
-async function pkCommit(){
-  const pk=state.pick; if(!pk || pk.busy) return; const t=pkTotals(); if(!t.types) return;
-  const acc = pk.acc.persons>0 ? { persons:pk.acc.persons, minutes:pk.acc.minutes, free:pk.acc.free } : null;
-  if(acc){ const err=validateMinutes(Math.round(acc.minutes), durationPolicy()); if(err){ tell(err); return; } }
-  pk.busy=true; pkBar();
-  try{
-    const accP=__pk.products.find(x=>x.type==='accompany');
-    await mutateSession(pk.sid, s=>{
-      t.items.forEach(x=>computeLine(addItemLine(s,x.p,null,x.qty)));
-      if(acc && accP) computeLine(addAccompanyLine(s,accP,acc.persons,acc.minutes,acc.free));
-    });
-    pk.sel={}; pk.acc.persons=0; pk.acc.free=false;
-    await pkRefresh(); showToast(`Added ${t.types} item type${t.types===1?'':'s'} (${t.units} unit${t.units===1?'':'s'}) · ${fmt(t.amount)}`);
-  }catch(e){ tell(e.message||String(e)); }
-  finally{ pk.busy=false; pkBar(); }
-}
-async function pkDone(){
-  const pk=state.pick; const t=pk?pkTotals():{types:0};
-  if(t.types && !(await askConfirm(`${t.types} selected item type(s) have not been added to the bill. Discard them?`,'Discard',true))) return;
-  const sid=pk?pk.sid:state.sessionId; state.pick=null; openSession(sid);
-}
-async function pkAddCombo(pid){
-  const p=__pk.products.find(x=>x.id===pid); if(!p) return;
-  const bevs=__pk.products.filter(x=>x.type==='beverage').map(x=>x.name); const pick=[null,null];
-  const draw=()=>{ openModal(`<button class="close" onclick="closeModal()">✕</button><h3>${esc(p.name)} — choose 2 drinks</h3><p class="muted" style="font-size:12px">${esc(p.desc||'')} · included drinks are not charged again.</p>
-    <label>Drink 1</label><div>${bevs.map(b=>`<span class="chip ${pick[0]===b?'sel':''}" onclick="window.__cb(0,'${esc(b)}')">${esc(b)}</span>`).join('')}</div>
-    <label>Drink 2</label><div>${bevs.map(b=>`<span class="chip ${pick[1]===b?'sel':''}" onclick="window.__cb(1,'${esc(b)}')">${esc(b)}</span>`).join('')}</div>
-    <button class="btn primary" style="margin-top:12px" ${pick[0]&&pick[1]?'':'disabled'} onclick="window.__cbDone()">Add combo</button>`); };
-  window.__cb=(i,b)=>{ pick[i]=b; draw(); };
-  window.__cbDone=async ()=>{ const ok=await act(mutateSession(state.pick.sid, s=>{ computeLine(addItemLine(s,p,[pick[0],pick[1]],1)); return true; })); if(ok){ closeModal(); showToast('Added '+p.name); await pkRefresh(); } };
-  draw();
 }
 
 /* ---- Edit / duplicate / delete lines ---- */
@@ -1360,7 +1553,7 @@ async function editLineModal(sid, lid){
   if(l.kind==='gaming') window.__elFillPlayers(l.players);
   window.__elPrev();
 }
-function cancelLineEdit(sid){ if(state.billEdSid===sid) billEditorModal(sid); else closeModal(); }
+function cancelLineEdit(sid){ closeModal(); }
 async function saveLineEdit(sid, lid){
   const r = window.__elRead(); if(r.error){ tell(r.error); return; }
   if(r.patch.physicalId){ const busy = await physicalBusy(r.patch.physicalId, sid, lid); const cur=(await dbGet('bsessions',sid)); const ln=cur&&cur.lines.find(x=>x.id===lid);
@@ -1373,14 +1566,6 @@ async function saveLineEdit(sid, lid){
     Object.assign(l, patch); computeLine(l); return true; }));
   if(ok){ showToast('Line updated'); afterLineChange(sid); }
 }
-async function duplicateLine(sid, lid){
-  const ok = await act(mutateSession(sid, s=>{
-    const i=s.lines.findIndex(x=>x.id===lid); if(i<0) throw new Error('This line no longer exists.');
-    const c=JSON.parse(JSON.stringify(s.lines[i])); c.id=s.nextLineId||(Math.max(...s.lines.map(x=>x.id))+1); s.nextLineId=c.id+1; c.createdAt=Date.now(); c.history=[];
-    if(c.kind==='gaming'){ c.state='ended'; c.startedAt=null; c.endedAt=Date.now(); c.elapsedMs=0; c.physicalId=null; c.physicalName=''; }   // a copied segment is finished: it never double-books a console
-    s.lines.splice(i+1,0,c); return true; }));
-  if(ok){ showToast('Line copied'); afterLineChange(sid); }
-}
 async function deleteLine(sid, lid){
   if(!can('deleteLines')){ tell('Deleting lines needs Admin permission.'); return; }
   const s = await dbGet('bsessions', sid);
@@ -1388,13 +1573,7 @@ async function deleteLine(sid, lid){
   if(!sesEditable(s)){ tell(`This session is ${STATUS_LABEL[s.status]} and can't be edited. Use Credit / Refund on its invoice.`); return; }
   const l = s.lines.find(x=>x.id===lid);
   if(!l){ tell('This line was already removed.'); render(); return; }
-  if(l.kind==='gaming' && l.state!=='ended'){
-    const c = await askChoice(`“${gamingTitle(l)}” is an active gaming segment (${fmt(l.total)}). What do you want to do?`, [
-      {label:'End segment — keep its charge',value:'end',cls:'primary'}, {label:'Remove line — started by mistake',value:'remove',cls:'danger'}, {label:'Correct the duration',value:'edit'}, {label:'Cancel',value:null}]);
-    if(c==='end'){ endLineModal(sid,lid); return; }
-    if(c==='edit'){ editLineModal(sid,lid); return; }
-    if(c!=='remove') return;
-  } else if(!(await askConfirm(`Delete “${l.name}” (${fmt(l.total)}) from this bill? Other lines and the session are not affected.`,'Delete',true))) return;
+  if(!(await askConfirm(`Delete “${l.kind==='gaming'?gamingTitle(l):l.name}” (${fmt(l.total)}) from this bill? Other lines and the session are not affected.`,'Delete',true))) return;
   const ok = await act(mutateSession(sid, d=>{ const n=d.lines.length; d.lines=d.lines.filter(x=>x.id!==lid); if(d.lines.length===n) throw new Error('This line was already removed.'); return true; }));
   if(ok){ delete expiredAlerted[sid+'-'+lid]; document.getElementById('expiryBanner-'+sid+'-'+lid)?.remove(); showToast('Line deleted'); afterLineChange(sid); }
 }
@@ -1415,76 +1594,7 @@ async function setPhysical(sid, lid, pid){
 }
 
 /* ---- gaming timers & explicit end of segments ---- */
-async function extendLine(sid, lid, mins){
-  const ok = await act(mutateSession(sid, s=>{ const l=s.lines.find(x=>x.id===lid); if(!l||l.kind!=='gaming'||l.state==='ended') throw new Error('That segment is no longer running.'); const m=l.minutes+mins; logHist(l,{minutes:m},['minutes']); l.minutes=m; computeLine(l); return true; }));
-  if(ok){ document.getElementById('expiryBanner-'+sid+'-'+lid)?.remove(); render(); }
-}
 /* Suggested billable time: time played rounded up to the next 30-minute block, with a 2-minute grace so a few seconds over never costs a whole extra block. Staff always confirm or change it. */
-function minBill(){ const m=Number((state.settings||{}).minBillMinutes); return isFinite(m)&&m>=0 ? Math.round(m) : 60; }   // minimum billed per ended segment (default 60 min); 0 turns it off
-function suggestMinutes(l){ const em=lineElapsedMs(l)/60000; return Math.max(minBill(), 30, Math.ceil((em-2)/30)*30); }
-async function switchLine(sid, lid){ state.afterEnd = { sid, lid, mode:'switch' }; await endLineModal(sid, lid); }
-async function changePlayersFlow(sid, lid){ state.afterEnd = { sid, lid, mode:'players' }; await endLineModal(sid, lid); }
-async function endLineModal(sid, lid){
-  const s = await dbGet('bsessions', sid);
-  if(!sesEditable(s)){ tell('This session is not open for editing.'); return; }
-  const l = s.lines.find(x=>x.id===lid); if(!l){ tell('This line no longer exists.'); return; } if(l.state==='ended'){ tell('This segment has already ended.'); return; }
-  const el=Math.round(lineElapsedMs(l)/60000), sug=suggestMinutes(l);
-  const prev=()=>{ const min=toMinutes(document.getElementById('enDur').value, document.getElementById('enUnit').value); const err=validateMinutes(min,durationPolicy()); const o=document.getElementById('enPrev');
-    o.innerHTML = err ? `<span style="color:var(--red)">${esc(err)}</span>` : `Charge for this segment: <b>${fmt(computeLine(Object.assign({},l,{minutes:min})).total)}</b>`; };
-  window.__enPrev=prev; window.__enSet=(m)=>{ document.getElementById('enDur').value=m; document.getElementById('enUnit').value='minutes'; prev(); };
-  const mode = state.afterEnd && state.afterEnd.sid===sid && state.afterEnd.lid===lid ? state.afterEnd.mode : null;
-  openModal(`<button class="close" onclick="state.afterEnd=null;closeModal()">✕</button><h3>End segment — ${esc(gamingTitle(l))}</h3>
-    <p class="muted" style="font-size:13px">Started ${timeStr(l.startTime||l.createdAt)} · ran <b>${fmtDur(el)}</b> · billed so far <b>${fmtDur(l.minutes)}</b>. Confirm what to bill for this segment — it will not keep growing after you end it.${minBill()?` <b>Minimum ${fmtDur(minBill())}</b> is pre-filled; you can change it below.`:''}</p>
-    <label>Billed duration</label><div class="row"><input id="enDur" type="number" step="any" min="0" value="${sug}" oninput="window.__enPrev()"><select id="enUnit" onchange="window.__enPrev()"><option value="minutes" selected>minutes</option><option value="hours">hours</option></select></div>
-    <div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" onclick="window.__enSet(${sug})">${minBill()?'Minimum / time played':'Time played, rounded up'} (${fmtDur(sug)})</button><button class="btn sm" onclick="window.__enSet(${l.minutes})">Keep ${fmtDur(l.minutes)}</button></div>
-    <div id="enPrev" style="margin:10px 0;font-size:15px"></div>
-    <div class="grid2"><button class="btn" onclick="state.afterEnd=null;closeModal()">Cancel</button><button class="btn primary" onclick="confirmEndLine(${sid},${lid})">${mode==='switch'?'End & pick replacement':mode==='players'?'End & set new player count':'End segment'}</button></div>`);
-  prev();
-}
-async function confirmEndLine(sid, lid){
-  const min = toMinutes(document.getElementById('enDur').value, document.getElementById('enUnit').value); const err = validateMinutes(min, durationPolicy());
-  if(err){ tell(err); return; }
-  const ended = await act(mutateSession(sid, s=>{ const l=s.lines.find(x=>x.id===lid); if(!l) throw new Error('This line no longer exists.'); if(l.state==='ended') throw new Error('This segment has already ended.');
-    logHist(l,{minutes:min},['minutes']); l.minutes=min; computeLine(l); stopLine(l); return { setupId:l.stationId, physicalId:l.physicalId, physicalName:l.physicalName, players:l.players }; }));
-  if(!ended) return;
-  document.getElementById('expiryBanner-'+sid+'-'+lid)?.remove(); delete expiredAlerted[sid+'-'+lid];
-  closeModal(); await render(); showToast('Segment ended — billed '+fmtDur(min));
-  const a = state.afterEnd; state.afterEnd=null;
-  if(a && a.sid===sid && a.lid===lid){ if(a.mode==='switch') openPicker(sid,'__gaming'); else if(a.mode==='players') playerSheet(sid, ended); }
-}
-/* New player count: pick the variant that continues the group — the finished segment stays exactly as it was */
-async function playerSheet(sid, info){
-  const st = await dbGet('stations', info.setupId);
-  if(!st || st.active===false){ openPicker(sid,'__gaming'); return; }
-  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>New player count — ${esc(setupLabel(st))}</h3><p class="muted" style="font-size:12px">The previous segment (${info.players} player${info.players>1?'s':''}) is kept with its own rate. Choose the segment that continues.</p>
-    ${setupVariants(st).map(v=>`<div class="posrow"><div><div class="nm">${esc(v.name)}</div><div class="sub">${fmt(v.hr)}/hour · ${fmt(v.half)}/30 min</div></div><button class="btn sm primary" onclick="startVariantSegment(${sid},${st.id},${v.players},${info.physicalId||'null'},'${esc(info.physicalName||'')}')">Start</button></div>`).join('')}
-    <button class="btn" style="margin-top:8px" onclick="closeModal()">Not now</button>`);
-}
-async function startVariantSegment(sid, setupId, players, physId, physName){
-  const st = await dbGet('stations', setupId); if(!st) return;
-  if(physId){ const b=await physicalBusy(physId,sid,null); if(b){ physId=null; physName=''; } }
-  const ok = await act(mutateSession(sid, s=>{ computeLine(makeGamingLine(s, st, players, { physicalId:physId||null, physicalName:physName||'' })); return true; }));
-  if(ok){ closeModal(); await render(); showToast('Started '+variantName(st,players)); }
-}
-/* End several segments at once — every running/paused segment is ended explicitly with a confirmed duration */
-async function endAllModal(sid){
-  const s = await dbGet('bsessions', sid);
-  if(!sesEditable(s)){ tell('This session is not open for editing.'); return; }
-  const open = openGamingLines(s);
-  if(!open.length){ tell('No gaming segments are running or paused in this session.'); return; }
-  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>End ${open.length} segment${open.length>1?'s':''}</h3>
-    <p class="muted" style="font-size:12px">Confirm the billed duration of each segment (pre-filled with time played, rounded up to 30 minutes, minimum ${fmtDur(minBill())}). You can edit each one. Ended segments stop accumulating charges.</p>
-    ${open.map(l=>`<div class="card" style="background:var(--panel2);padding:10px"><b>${esc(gamingTitle(l))}</b><div class="timer">Started ${timeStr(l.startTime||l.createdAt)} · ran ${fmtDur(Math.ceil(lineElapsedMs(l)/60000))} · billed ${fmtDur(l.minutes)}</div>
-      <div class="row" style="align-items:center;margin-top:6px"><input id="ea-${l.id}" type="number" min="1" step="any" value="${suggestMinutes(l)}"><span class="muted" style="font-size:12px">minutes</span></div></div>`).join('')}
-    <div class="grid2"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="confirmEndAll(${sid})">End all segments</button></div>`);
-}
-async function confirmEndAll(sid){
-  const s = await dbGet('bsessions', sid); const open = openGamingLines(s); const mins={};
-  for(const l of open){ const el=document.getElementById('ea-'+l.id); const m=toMinutes(el?el.value:NaN,'minutes'); const err=validateMinutes(m,durationPolicy()); if(err){ tell(`${gamingTitle(l)}: ${err}`); return; } mins[l.id]=m; }
-  const ok = await act(mutateSession(sid, d=>{ d.lines.forEach(l=>{ if(l.kind==='gaming' && l.state!=='ended' && mins[l.id]!==undefined){ logHist(l,{minutes:mins[l.id]},['minutes']); l.minutes=mins[l.id]; computeLine(l); stopLine(l); } }); return true; }));
-  if(ok){ open.forEach(l=>{ document.getElementById('expiryBanner-'+sid+'-'+l.id)?.remove(); delete expiredAlerted[sid+'-'+l.id]; }); closeModal(); await render(); showToast('All segments ended'); }
-}
-async function endGamingAll(sid){ return endAllModal(sid); }
 async function toggleHold(sid){
   const r = await act(mutateSession(sid, s=>{
     if(s.status==='hold'){ s.lines.forEach(l=>{ if(l.kind==='gaming' && l.state==='paused'){ l.state='running'; l.startedAt=Date.now(); } }); s.status='active'; }
@@ -1508,16 +1618,6 @@ async function confirmCancelSession(sid){
 }
 
 /* ---- Edit Bill (dashboard shortcut): edit/copy/delete any unfinalized line without opening the session ---- */
-async function billEditorModal(sid){
-  const s = await dbGet('bsessions', sid);
-  if(!sesEditable(s)){ tell('This session is not open for editing.'); return; }
-  state.billEdSid = sid; const t = sessionTotals(s);
-  openModal(`<button class="close" onclick="state.billEdSid=null;closeModal();render()">✕</button><h3>Edit Bill — ${sesCode(s)}</h3>
-    ${s.lines.length ? s.lines.map(l=>lineCard(s,l,true,true)).join('') : '<div class="muted">No lines yet.</div>'}
-    <div class="list-item"><b>Current subtotal</b><b>${fmt(t.subtotal)}</b></div>
-    <div class="grid2" style="margin-top:10px"><button class="btn" onclick="state.billEdSid=null;closeModal();addLineModal(${sid})">+ Add line</button><button class="btn primary" onclick="state.billEdSid=null;closeModal();render()">Done</button></div>`);
-}
-
 /* ---- Live ticker & expiry alerts (per gaming segment; reads the in-memory cache, not the database) ---- */
 const expiredAlerted = {};
 function beep(){
@@ -1543,8 +1643,6 @@ function dismissTimeUp(key){
   const el = document.getElementById('expiryBanner-'+key); if(!el) return;
   el.style.opacity='0'; el.style.transform = (el.style.transform||'') + ' translateY(-12px)'; setTimeout(()=>el.remove(), 220);
 }
-function toggleTimeUpExtend(key){ const x=document.querySelector('#expiryBanner-'+key+' .tu-x'); if(x) x.hidden = !x.hidden; }
-function endFromTimeUp(sid, lid){ document.getElementById('expiryBanner-'+sid+'-'+lid)?.remove(); endLineModal(sid, lid); }
 function wireTimeUpSwipe(el, key){
   let x0=0, y0=0, dx=0, dy=0, drag=false;
   el.addEventListener('pointerdown', e=>{ if(e.target.closest('button')) return; drag=true; x0=e.clientX; y0=e.clientY; dx=dy=0; el.style.transition='none'; try{ el.setPointerCapture(e.pointerId); }catch(_){} });
@@ -1559,9 +1657,8 @@ function showTimeUpBanner(sid, l){
   let stack = document.getElementById('alertStack'); if(!stack){ stack=document.createElement('div'); stack.id='alertStack'; document.body.appendChild(stack); }
   while(stack.children.length>=3) stack.firstElementChild.remove();
   const el = document.createElement('div'); el.id='expiryBanner-'+key; el.className='tu'; el.setAttribute('role','status'); el.setAttribute('aria-live','polite');
-  el.innerHTML = `<b>Gaming time completed — ${esc(gamingTitle(l))}</b>
-    <div class="tu-a"><button class="btn sm" onclick="toggleTimeUpExtend('${key}')">Extend</button><button class="btn sm primary" onclick="endFromTimeUp(${sid},${l.id})">End Session</button><button class="btn sm ghost" onclick="dismissTimeUp('${key}')">Dismiss</button></div>
-    <div class="tu-x" hidden><button class="btn sm" onclick="extendLine(${sid},${l.id},15)">+15 min</button><button class="btn sm" onclick="extendLine(${sid},${l.id},30)">+30 min</button><button class="btn sm" onclick="extendLine(${sid},${l.id},60)">+1 hour</button></div>`;
+  el.innerHTML = `<b>Time added so far is used up — ${esc(gamingTitle(l))}</b><div class="muted" style="font-size:12px">The bill stays ${fmtDur(l.minutes)} until you edit the item.</div>
+    <div class="tu-a"><button class="btn sm primary" onclick="dismissTimeUp('${key}');openLineEdit(${sid},${l.id})">Edit item</button><button class="btn sm ghost" onclick="dismissTimeUp('${key}')">Dismiss</button></div>`;
   stack.appendChild(el); wireTimeUpSwipe(el, key);
   setTimeout(()=>{ if(el.isConnected) dismissTimeUp(key); }, 20000);   // goes away by itself
 }
@@ -1589,29 +1686,25 @@ setInterval(tickSessions, 1000);
 function sessionCard(s){
   const t = sessionTotals(s);
   const g = s.lines.filter(l=>l.kind==='gaming');
-  const running = g.filter(l=>l.state!=='ended').length;
+  const running = g.length;
   const gMins = g.reduce((a,l)=>a+(Number(l.minutes)||0),0);
   const title = s.groupName || s.customerName || '';
   const pill = s.status==='hold'?'amber':s.status==='ready'?'green':'neon';
-  const setups = g.slice(0,3).map(l=>esc(gamingTitle(l))+(l.state==='ended'?' ✓':l.state==='paused'?' ⏸':'')).join(' · ') + (g.length>3 ? ` · +${g.length-3} more` : '');
+  const setups = g.slice(0,3).map(l=>esc(gamingTitle(l))).join(' · ') + (g.length>3 ? ` · +${g.length-3} more` : '');
   const label = `Open ${sesCode(s)}${title?', '+title:''}. ${STATUS_LABEL[s.status]}. Current bill ${fmt(t.subtotal)}. Opens session management.`;
   return `<div class="card sess-card" data-sid="${s.id}">
     <button type="button" class="sess-open" onclick="openSession(${s.id})" aria-label="${esc(label)}"></button>
     <div class="row" style="justify-content:space-between;gap:8px">
-      <div style="min-width:0"><b>${sesCode(s)}</b>${title?` · ${esc(title)}`:''}<br><span class="muted" style="font-size:12px">Started ${timeStr(s.startTime)} · ${running} active setup${running===1?'':'s'} · ${s.lines.length} line${s.lines.length===1?'':'s'}</span></div>
+      <div style="min-width:0"><b>${sesCode(s)}</b>${title?` · ${esc(title)}`:''}<br><span class="muted" style="font-size:12px">Started ${timeStr(s.startTime)} · ${s.lines.length} item${s.lines.length===1?'':'s'}</span></div>
       <span style="white-space:nowrap"><span class="pill ${pill}">${STATUS_LABEL[s.status]}</span><span class="sess-chev" aria-hidden="true">›</span></span>
     </div>
     ${g.length?`<div class="muted" style="font-size:12px;margin-top:6px;overflow-wrap:anywhere">${setups} · <b>${fmtDur(gMins)}</b> gaming</div>`:''}
     <div style="font-size:20px;font-weight:600;margin:6px 0 2px">${fmt(t.subtotal)}</div>
     <div class="muted" style="font-size:12px;margin-bottom:8px">Gaming ${fmt(t.gaming)} · Food ${fmt(t.food)} · Accompanying ${fmt(t.accompany)} · Overtime ${fmt(t.overtime)}</div>
-    <div class="grid2 sess-acts">
-      <button class="btn sm" onclick="addGamingSegment(${s.id})">Add Gaming Segment</button>
-      <button class="btn sm" onclick="addLineModal(${s.id})">Add Item</button>
-      <button class="btn sm" onclick="billEditorModal(${s.id})">Edit Bill</button>
-      <button class="btn sm" onclick="toggleHold(${s.id})">${s.status==='hold'?'Resume':'Pause'}</button>
-      <button class="btn sm" onclick="endAllModal(${s.id})">End Gaming</button>
-      <button class="btn sm pink" onclick="openCheckout(${s.id})">Checkout</button>
-      <button class="btn sm danger" style="grid-column:1/-1" onclick="cancelSessionModal(${s.id})">Cancel Session</button>
+    <div class="sess-acts sess-3">
+      <button class="btn sm" onclick="openSession(${s.id})">Edit</button>
+      <button class="btn sm primary" onclick="openCheckout(${s.id})">Checkout</button>
+      <button class="btn sm danger" onclick="cancelSessionModal(${s.id})">Cancel Session</button>
     </div></div>`;
 }
 async function screenDashboard(){
@@ -1638,7 +1731,7 @@ async function screenDashboard(){
     <div class="stat"><div class="v">${fmt(foodRev)}</div><div class="l">Food & beverage</div></div>
     <div class="stat"><div class="v">${fmt(receivable)}</div><div class="l">Balance due (all)</div></div>
   </div>
-  <div class="section-title">Active Sessions <span class="muted" style="text-transform:none">· ${open.length} open · ${activeSetups} setup(s) running</span></div>
+  <div class="section-title">Active Sessions <span class="muted" style="text-transform:none">· ${open.length} open </span></div>
   ${open.length ? open.map(sessionCard).join('') : `<div class="empty">No active sessions.<br><br><button class="btn primary sm" onclick="startSession()">Start Session</button></div>`}
   <div class="section-title">Quick Actions</div>
   <div class="qa">
@@ -1677,10 +1770,10 @@ async function openCheckout(sid){
   if(s.status!=='ready') await act(mutateSession(sid, d=>{ d.status='ready'; return true; }));
   const st = state.settings;
   if(state.ckForm && state.ckForm.sid===sid){ state.ckForm.name = state.ckForm.name || s.customerName || ''; state.ckForm.mobile = state.ckForm.mobile || s.customerMobile || ''; }
-  else state.ckForm = { sid, name:s.customerName||'', mobile:s.customerMobile||'', discountPct:0, date:ymd(Date.now()), terms:st.dueTermsDefault||'Due on receipt', orderNo:'', salesperson:st.salesperson||'', subject:'', notes:'', payments:[] };
+  else { const iv=s.inv||{}; state.ckForm = { sid, name:s.customerName||'', mobile:s.customerMobile||'', discountPct:finOf(s).discountPct, date:iv.date||ymd(Date.now()), terms:iv.terms||st.dueTermsDefault||'Due on receipt', orderNo:iv.orderNo||'', salesperson:iv.salesperson!==undefined?iv.salesperson:(st.salesperson||''), subject:iv.subject||'', notes:s.notes||'', payments:[] }; }
   go('checkout');
 }
-function ckTotals(){ return billTotals(state.ckSession.lines, state.ckForm.discountPct, state.settings); }
+function ckTotals(){ return billTotals(state.ckSession.lines, state.ckForm.discountPct, state.settings, finOf(state.ckSession)); }
 function ckPaid(){ return state.ckForm.payments.reduce((a,p)=>a+Math.round(Number(p.amount)||0),0); }
 function ckSummaryHtml(){
   const t = ckTotals(), paid = ckPaid(), st = state.settings;
@@ -1688,26 +1781,36 @@ function ckSummaryHtml(){
     <tr><td>Subtotal</td><td class="right">${fmt(t.subtotal)}</td></tr>
     <tr><td>Discount (${t.discountPct}% of gaming only)</td><td class="right">-${fmt(t.discount)}</td></tr>
     ${st.taxEnabled?`<tr><td>${esc(st.taxLabel||'Tax')} (${st.taxRate}%)</td><td class="right">${fmt(t.tax)}</td></tr>`:''}
+    ${t.adjustment?`<tr><td>Adjustment</td><td class="right">${fmt(t.adjustment)}</td></tr>`:''}${t.tcs?`<tr><td>TCS</td><td class="right">${fmt(t.tcs)}</td></tr>`:''}${t.tds?`<tr><td>TDS</td><td class="right">-${fmt(t.tds)}</td></tr>`:''}
     <tr class="total-row"><td>Grand total</td><td class="right">${fmt(t.grand)}</td></tr>
     <tr><td>Payments received</td><td class="right">${fmt(paid)}</td></tr>
-    <tr class="total-row"><td>Balance due</td><td class="right" style="color:${t.grand-paid>0?'var(--amber)':'var(--green)'}">${fmt(t.grand-paid)}</td></tr></table>`;
+    <tr class="total-row"><td>Balance due</td><td class="right" style="color:${t.grand-paid>0?'var(--amber)':'var(--ok,#4fb286)'}">${fmt(t.grand-paid)}</td></tr></table>`;
+}
+function payTiles(sel, onclickFn, allowLater){
+  const tile=(m,label,on,fn)=>`<button type="button" class="paytile${on?' sel':''}" role="radio" aria-checked="${on}" onclick="${fn}">${esc(label)}</button>`;
+  return `<div class="paygrid" role="radiogroup" aria-label="Payment method">${PAY_METHODS.map(m=>tile(m,m,sel===m,`${onclickFn}('${m}')`)).join('')}${allowLater?tile('',  'Pay later', sel==='', `${allowLater}()`):''}</div>`;
 }
 function ckPayRowsHtml(){
-  const f = state.ckForm;
-  return f.payments.map((p,i)=>`<div class="row" style="gap:6px;margin-bottom:6px;align-items:center">
-    <select onchange="ckPay(${i},'method',this.value)" style="flex:1.2">${PAY_METHODS.map(m=>`<option ${m===p.method?'selected':''}>${m}</option>`).join('')}</select>
-    <input type="number" min="0" value="${p.amount}" oninput="ckPay(${i},'amount',this.value)" style="flex:1" placeholder="₹">
-    <button class="btn sm" style="border-color:var(--red);color:var(--red)" onclick="ckRemovePay(${i})">✕</button></div>`).join('') || '<div class="muted" style="font-size:12px;margin-bottom:6px">No payment recorded yet — the balance stays due on the invoice.</div>';
+  const f = state.ckForm, ps = f.payments, split = ps.length>1;
+  if(!ps.length) return `<div class="muted" style="font-size:12px;margin-bottom:8px">Tap how the customer is paying</div>${payTiles('', 'ckPayFull', 'ckPayLater')}
+    <div class="paynote">No payment recorded — the full amount stays due on the invoice.</div>`;
+  return ps.map((p,i)=>`<div class="payrow">
+    ${split?`<div class="payhead"><b>Payment ${i+1}</b><button type="button" class="payx" aria-label="Remove payment ${i+1}" onclick="ckRemovePay(${i})">Remove</button></div>`:''}
+    ${payTiles(p.method, `ckSetMethod.bind(null,${i})`, !split ? 'ckPayLater' : '')}
+    <div class="payamt"><label for="payAmt${i}">Amount received (₹) by <b class="payby">${esc(p.method)}</b></label>
+      <input id="payAmt${i}" type="number" inputmode="decimal" min="0" value="${p.amount}" oninput="ckPay(${i},'amount',this.value)" onfocus="this.select()" placeholder="₹"></div></div>`).join('') + `<button type="button" class="btn sm paysplit" onclick="ckAddPay()">+ Split between methods</button>`;
 }
+function ckSetMethod(i, m){ state.ckForm.payments[i].method = m; document.getElementById('ckPays').innerHTML=ckPayRowsHtml(); ckRefresh(); }
+function ckPayLater(){ state.ckForm.payments=[]; document.getElementById('ckPays').innerHTML=ckPayRowsHtml(); ckRefresh(); }
 function ckRefresh(){
   const a=document.getElementById('ckSummary'); if(a) a.innerHTML=ckSummaryHtml();
   const d=document.getElementById('ckDue'); if(d) d.textContent=addDaysStr(state.ckForm.date||ymd(Date.now()), DUE_TERMS[state.ckForm.terms]||0);
-  const ft=document.getElementById('ckFootTotal'); if(ft){ const t=ckTotals(); ft.textContent=fmt(t.grand); const fb=document.getElementById('ckFootBal'); if(fb && !(state.ckSession&&openGamingLines(state.ckSession).length)) fb.textContent='Balance due '+fmt(t.grand-ckPaid()); }
+  const ft=document.getElementById('ckFootTotal'); if(ft){ const t=ckTotals(); ft.textContent=fmt(t.grand); const fb=document.getElementById('ckFootBal'); if(fb) fb.textContent='Balance due '+fmt(t.grand-ckPaid()); }
 }
 function ck(field, v){ state.ckForm[field]=v; if(field==='mobile') ckLookup(); ckRefresh(); }
 function ckPay(i, k, v){ state.ckForm.payments[i][k]=v; ckRefresh(); }
 function ckRemovePay(i){ state.ckForm.payments.splice(i,1); document.getElementById('ckPays').innerHTML=ckPayRowsHtml(); ckRefresh(); }
-function ckAddPay(method){ const bal=Math.max(0, ckTotals().grand-ckPaid()); state.ckForm.payments.push({method:method||'Cash', amount:bal}); document.getElementById('ckPays').innerHTML=ckPayRowsHtml(); ckRefresh(); }
+function ckAddPay(){ const used=state.ckForm.payments.map(p=>p.method); const m=PAY_METHODS.find(x=>!used.includes(x))||PAY_METHODS[0]; const bal=Math.max(0, ckTotals().grand-ckPaid()); state.ckForm.payments.push({method:m, amount:bal}); document.getElementById('ckPays').innerHTML=ckPayRowsHtml(); ckRefresh(); }
 function ckPayFull(method){ state.ckForm.payments=[{method, amount:ckTotals().grand}]; document.getElementById('ckPays').innerHTML=ckPayRowsHtml(); ckRefresh(); }
 async function ckLookup(){
   const badge=document.getElementById('ckBadge'); if(!badge) return;
@@ -1728,12 +1831,9 @@ async function screenCheckout(){
   state.ckSession = s;
   const st = state.settings; const nextNo = (st.invoicePrefix||'LVL-INV-')+String(st.nextInvoiceNo||1).padStart(6,'0');
   setTimeout(ckLookup,0);
-  const open = openGamingLines(s);
   const grouped = ['gaming','accompany','overtime','food','other'].map(b=>[b, s.lines.filter(l=>l.bucket===b)]).filter(x=>x[1].length);
   const names = {gaming:'Gaming',accompany:'Accompanying persons',overtime:'Overtime',food:'Food & beverages',other:'Other'};
-  return `<div class="row" style="justify-content:space-between;align-items:center"><button class="btn ghost sm" onclick="openSession(${s.id})">← Back to session</button><span class="pill green">${STATUS_LABEL[s.status]}</span></div>
-    <h2>Checkout — ${sesCode(s)}</h2>
-    ${open.length?`<div class="card" style="border-color:var(--amber)"><b>${open.length} gaming segment${open.length>1?'s are':' is'} still open</b><div class="muted" style="font-size:12px;margin:4px 0 8px">${open.map(l=>esc(gamingTitle(l))).join(', ')}. Segments must be ended explicitly so each is billed for its own duration.</div><button class="btn sm primary" onclick="endAllModal(${s.id})">End segments…</button></div>`:''}
+  return `${zhead('Checkout',{back:1, fallback:'dashboard'})}<div class="muted" style="margin:0 4px 8px">${sesCode(s)} · <span class="pill green">${STATUS_LABEL[s.status]}</span></div>
     <div class="section-title">Customer Details</div>
     <div class="card">
       <label>Mobile number</label><input id="ckMobile" value="${esc(f.mobile)}" inputmode="numeric" placeholder="10-digit mobile (for WhatsApp)" oninput="ck('mobile',this.value)">
@@ -1759,20 +1859,17 @@ async function screenCheckout(){
     <div class="section-title">Payment</div>
     <div class="card">
       <div id="ckPays">${ckPayRowsHtml()}</div>
-      <div class="muted" style="font-size:11px;margin:4px 0">Pay in full:</div>
-      <div>${PAY_METHODS.map(m=>`<span class="chip" onclick="ckPayFull('${m}')">${m}</span>`).join('')}</div>
-      <button class="btn sm" style="margin-top:6px" onclick="ckAddPay('Cash')">+ Add split payment</button>
     </div>
     <div class="card" id="ckSummary">${ckSummaryHtml()}</div>
-    <div class="footbar"><div class="inner"><div class="sum"><b id="ckFootTotal">${fmt(ckTotals().grand)}</b><div class="muted" style="font-size:11px" id="ckFootBal">${open.length?'End running segments first':'Balance due '+fmt(ckTotals().grand-ckPaid())}</div></div><button class="btn primary" id="ckFinalize" ${open.length?'disabled':''} onclick="finalizeCheckout()">Finalize Invoice</button></div></div>`;
+    <div class="footbar"><div class="inner"><div class="sum"><b id="ckFootTotal">${fmt(ckTotals().grand)}</b><div class="muted" style="font-size:11px" id="ckFootBal">Balance due ${fmt(ckTotals().grand-ckPaid())}</div></div><button class="btn primary" id="ckFinalize" onclick="finalizeCheckout()">Finalize Invoice</button></div></div>`;
 }
 async function finalizeCheckout(){
   if(state.finalizing) return; state.finalizing=true;
   const btn=document.getElementById('ckFinalize'); if(btn){ btn.disabled=true; btn.style.opacity='.5'; }
   try{
     const f=state.ckForm; const s=await dbGet('bsessions', f.sid);
-    const t = billTotals(s.lines, f.discountPct, state.settings); const paid = ckPaid();
-    if(t.grand-paid>0 && !(await askConfirm(`Balance of ${fmt(t.grand-paid)} will remain due on this invoice. Finalize anyway?`))) throw {silent:true};
+    const t = billTotals(s.lines, f.discountPct, state.settings, finOf(s)); const paid = ckPaid();
+    if(t.grand-paid>0 && !(await askConfirm(paid>0 ? `Only ${fmt(paid)} (${f.payments.filter(p=>Math.round(Number(p.amount)||0)>0).map(p=>p.method).join(' + ')}) is recorded. Balance of ${fmt(t.grand-paid)} will remain due on this invoice. Finalize anyway?` : `No payment method is selected, so this invoice will be saved as UNPAID (${fmt(t.grand)} due). Finalize anyway?`,'Finalize'))) throw {silent:true};
     const inv = await finalizeSessionCore(f);
     state.ckForm=null; state.ckSession=null; state.invoiceId=inv.id;
     go('dashboard'); showInvoiceDone(inv);
@@ -1791,9 +1888,7 @@ async function finalizeSessionCore(f, opts){
   if(mobRaw && !mob) throw new Error('Enter a valid 10-digit Indian mobile number, or leave it blank.');
   const name=(f.name||'').trim();
   const date = opts.date || Date.now();
-  const stillOpen = openGamingLines(s);
-  if(stillOpen.length) throw new Error(`End ${stillOpen.length} gaming segment${stillOpen.length>1?'s':''} before finalizing (${stillOpen.map(l=>gamingTitle(l)).join(', ')}). Each segment is billed for its own confirmed duration, not for the time until the invoice is finalized.`);
-  const t = billTotals(s.lines, f.discountPct, settings);
+  const t = billTotals(s.lines, f.discountPct, settings, finOf(s));
   const payments = (f.payments||[]).map(p=>({ method:p.method, amount:Math.round(Number(p.amount)||0), date })).filter(p=>p.amount>0);
   const paid = payments.reduce((a,p)=>a+p.amount,0);
   if(paid>t.grand) throw new Error(`Payments (${fmt(paid)}) are more than the invoice total (${fmt(t.grand)}).`);
@@ -1802,12 +1897,13 @@ async function finalizeSessionCore(f, opts){
   const number = (settings.invoicePrefix||'LVL-INV-') + String(n).padStart(6,'0');
   const invDate = f.date || ymd(date);
   const lines = s.lines.map(l=>JSON.parse(JSON.stringify(l)));
+  lines.forEach(l=>stopLine(l));   // timers are just a record: closing them keeps the timestamps and never changes minutes or price
   const gl = lines.filter(l=>l.kind==='gaming');
   const inv = { number, date, invoiceDate:invDate, dueTerms:f.terms||'Due on receipt', dueDate:addDaysStr(invDate, DUE_TERMS[f.terms]||0),
     orderNo:f.orderNo||'', salesperson:f.salesperson||'', subject:f.subject||'', notes:f.notes||'',
     sessionId:s.id, sessionCode:sesCode(s), groupName:s.groupName||'', customerName:name||'Walk-in Customer', customerMobile:mob,
     lines, gamingAmount:t.gaming, accompanyAmount:t.accompany, overtimeAmount:t.overtime, foodAmount:t.food, otherAmount:t.other,
-    subtotal:t.subtotal, discountPercent:t.discountPct, discount:t.discount, tax:t.tax, taxLabel:settings.taxEnabled?`${settings.taxLabel||'Tax'} ${settings.taxRate}%`:'',
+    subtotal:t.subtotal, discountPercent:t.discountPct, discount:t.discount, tax:t.tax, adjustmentAmt:t.adjustment, tcs:t.tcs, tds:t.tds, taxLabel:settings.taxEnabled?`${settings.taxLabel||'Tax'} ${settings.taxRate}%`:'',
     grandTotal:t.grand, payments, adjustments:[], paymentMethod:payments.map(p=>p.method).join(' + ')||'Unpaid',
     durationMins:gl.reduce((a,l)=>a+l.minutes,0), status:'finalized' };
   inv.status = invoiceBalance(inv)<=0 ? 'paid' : 'finalized';
@@ -1815,7 +1911,7 @@ async function finalizeSessionCore(f, opts){
   if(!fresh || fresh.updatedAt!==s.updatedAt) throw new Error('This session was changed (possibly on another device) while you were checking out. Go back, review the bill, and finalize again.');
   await createRecord('invoices', inv);
   // Mark the session billed immediately so a retry/double-tap can never create a second invoice.
-  await mutateSession(f.sid, d=>{ if(d.invoiceId) throw new Error('This session already has an invoice.'); d.status=inv.status; d.invoiceId=inv.id; d.invoiceNumber=number; d.finalizedAt=date; return true; });
+  await mutateSession(f.sid, d=>{ if(d.invoiceId) throw new Error('This session already has an invoice.'); d.lines.forEach(l=>stopLine(l)); d.status=inv.status; d.invoiceId=inv.id; d.invoiceNumber=number; d.finalizedAt=date; return true; });
   const soft = async (fn)=>{ try{ await fn(); }catch(e){ console.error('post-invoice step failed', e); } };
   await soft(async()=>{
     if(!mob) return;
@@ -1868,6 +1964,9 @@ function invoiceText(inv){
   out.push('', `Subtotal: ${fmt(inv.subtotal)}`);
   if(inv.discount) out.push(`Discount${inv.discountPercent?' ('+inv.discountPercent+'% on gaming)':''}: -${fmt(inv.discount)}`);
   if(inv.tax) out.push(`${inv.taxLabel||'Tax'}: ${fmt(inv.tax)}`);
+  if(inv.adjustmentAmt) out.push(`Adjustment: ${fmt(inv.adjustmentAmt)}`);
+  if(inv.tcs) out.push(`TCS: ${fmt(inv.tcs)}`);
+  if(inv.tds) out.push(`TDS: -${fmt(inv.tds)}`);
   out.push(`TOTAL: ${fmt(inv.grandTotal)}`);
   const pays = (inv.payments||[]).filter(p=>p.amount>0).map(p=>`${p.method} ${fmt(p.amount)}`);
   if(inv.payments) out.push(`Paid: ${pays.join(' + ')||fmt(0)}`, `Balance due: ${fmt(Math.max(0,invoiceBalance(inv)))}`); else out.push(`Payment: ${inv.paymentMethod}`);
@@ -1915,7 +2014,7 @@ async function printInvoice(id){
     <h3>Invoice ${esc(inv.number)}</h3><div>Date: ${new Date(inv.date).toLocaleDateString('en-IN')} · Due: ${esc(inv.dueDate||'on receipt')}</div>
     <div>Customer: ${esc(inv.customerName)} ${esc(inv.customerMobile||'')}</div>
     <table>${['gaming','accompany','overtime','food','other'].map(sec).join('')}
-      <tr><td>Subtotal</td><td class="right">₹${Math.round(inv.subtotal)}</td></tr>${inv.discount?`<tr><td>Discount (gaming only)</td><td class="right">-₹${Math.round(inv.discount)}</td></tr>`:''}${inv.tax?`<tr><td>${esc(inv.taxLabel||'Tax')}</td><td class="right">₹${Math.round(inv.tax)}</td></tr>`:''}
+      <tr><td>Subtotal</td><td class="right">₹${Math.round(inv.subtotal)}</td></tr>${inv.discount?`<tr><td>Discount (gaming only)</td><td class="right">-₹${Math.round(inv.discount)}</td></tr>`:''}${inv.tax?`<tr><td>${esc(inv.taxLabel||'Tax')}</td><td class="right">₹${Math.round(inv.tax)}</td></tr>`:''}${inv.adjustmentAmt?`<tr><td>Adjustment</td><td class="right">₹${Math.round(inv.adjustmentAmt)}</td></tr>`:''}${inv.tcs?`<tr><td>TCS</td><td class="right">₹${Math.round(inv.tcs)}</td></tr>`:''}${inv.tds?`<tr><td>TDS</td><td class="right">-₹${Math.round(inv.tds)}</td></tr>`:''}
       <tr class="tot"><td>GRAND TOTAL</td><td class="right">₹${Math.round(inv.grandTotal)}</td></tr>
       ${(inv.payments||[]).map(p=>`<tr><td>Paid — ${esc(p.method)}</td><td class="right">₹${Math.round(p.amount)}</td></tr>`).join('')}<tr><td><b>Balance due</b></td><td class="right"><b>₹${Math.max(0,invoiceBalance(inv))}</b></td></tr></table>
     <p>${esc(s.footer||'')}</p><script>window.print()<\/script></body></html>`);
@@ -1960,7 +2059,7 @@ async function screenInvoiceView(){
     <div class="card"><div>${esc(inv.customerName)}${inv.customerMobile?' · '+inv.customerMobile:''}</div>
       <div class="muted" style="font-size:12px">${new Date(inv.date).toLocaleString('en-IN')}${inv.dueDate?' · due '+inv.dueDate:''}${inv.sessionCode?' · '+inv.sessionCode:''}${inv.groupName?' · '+esc(inv.groupName):''}${inv.salesperson?' · by '+esc(inv.salesperson):''}</div>${inv.subject?`<div class="muted" style="font-size:12px">${esc(inv.subject)}</div>`:''}</div>
     <div class="card">${['gaming','accompany','overtime','food','other'].map(sec).join('')}
-      <table style="margin-top:8px"><tr><td>Subtotal</td><td class="right">${fmt(inv.subtotal)}</td></tr>${inv.discount?`<tr><td>Discount (${inv.discountPercent||''}% gaming only)</td><td class="right">-${fmt(inv.discount)}</td></tr>`:''}${inv.tax?`<tr><td>${esc(inv.taxLabel||'Tax')}</td><td class="right">${fmt(inv.tax)}</td></tr>`:''}
+      <table style="margin-top:8px"><tr><td>Subtotal</td><td class="right">${fmt(inv.subtotal)}</td></tr>${inv.discount?`<tr><td>Discount (${inv.discountPercent||''}% gaming only)</td><td class="right">-${fmt(inv.discount)}</td></tr>`:''}${inv.tax?`<tr><td>${esc(inv.taxLabel||'Tax')}</td><td class="right">${fmt(inv.tax)}</td></tr>`:''}${inv.adjustmentAmt?`<tr><td>Adjustment</td><td class="right">${fmt(inv.adjustmentAmt)}</td></tr>`:''}${inv.tcs?`<tr><td>TCS</td><td class="right">${fmt(inv.tcs)}</td></tr>`:''}${inv.tds?`<tr><td>TDS</td><td class="right">-${fmt(inv.tds)}</td></tr>`:''}
       <tr class="total-row"><td>Grand total</td><td class="right">${fmt(inv.grandTotal)}</td></tr>
       ${(inv.adjustments||[]).filter(a=>a.type==='credit').map(a=>`<tr><td>Credit note — ${esc(a.reason||'')}</td><td class="right">-${fmt(a.amount)}</td></tr>`).join('')}
       ${(inv.payments||[]).map(p=>`<tr><td>${p.amount<0?'Refund':'Paid'} — ${esc(p.method)} <span class="muted" style="font-size:11px">${new Date(p.date).toLocaleDateString('en-IN')}</span></td><td class="right">${fmt(Math.abs(p.amount))}</td></tr>`).join('')}
@@ -2613,12 +2712,12 @@ function repInvoice(inv, pm, F){
   const grand = inv.grandTotal||0, credits = invoiceCredits(inv);
   const credEx = grand>0 ? credits*((sub-(inv.discount||0))/grand) : 0, credTax = credits-credEx;   // a credit note refunds revenue AND its share of tax
   const cats = {}; CAT_ORDER.forEach(c=>cats[c]=0);
-  L.forEach(x=>{ cats[x.cat]+=x.amount; }); cats.gaming -= discount;
+  L.forEach(x=>{ cats[x.cat]+=x.amount; }); cats.gaming -= discount; cats.other += (inv.adjustmentAmt||0)*share;   // an invoice adjustment is part of what was billed
   const net0 = CAT_ORDER.reduce((s,c)=>s+cats[c],0);
   if(net0>0) CAT_ORDER.forEach(c=>{ cats[c] -= credEx*share*cats[c]/net0; });
   CAT_ORDER.forEach(c=>cats[c]=r2(cats[c]));
   const net = r2(CAT_ORDER.reduce((s,c)=>s+cats[c],0));
-  const tax = r2((inv.tax||0)*share - credTax*share);
+  const tax = r2(((inv.tax||0)+(inv.tcs||0))*share - credTax*share);   // TCS is collected on behalf of the government, like tax
   return { inv, id:inv.id, number:inv.number, date:inv.date, name:inv.customerName||'Walk-in Customer', mobile:inv.customerMobile||'', lines:L,
     gross:r2(gross), discount:r2(discount), credEx:r2(credEx*share), cats, net, tax, total:r2(net+tax),
     pays, paid:invoicePaid(inv), balance:Math.max(0,invoiceBalance(inv)), status:st, session:inv.sessionCode||'', sessionId:inv.sessionId };
@@ -3131,7 +3230,7 @@ async function deletePhysical(id){
 /* ---- Gaming pricing ---- */
 async function screenSetPricing(){
   const sts = await dbAll('stations'); const s=state.settings;
-  return setBack('Gaming Pricing') + `<div class="card"><label>Default duration for a new gaming line (minutes)</label><input id="gpDefault" type="number" min="30" step="30" value="${s.defaultGamingMinutes||60}"><div class="muted" style="font-size:11px;margin-top:4px">Pre-filled when a gaming setup is added. Staff can always edit it, and nothing is charged beyond what is billed on the line.</div></div><div class="card"><label>Minimum billed time when a gaming segment ends (minutes)</label><input id="gpMin" type="number" min="0" step="30" value="${minBill()}"><div class="muted" style="font-size:11px;margin-top:4px">Default 60: a segment that ran 10, 30, 45 or 59 minutes is billed 60 minutes. Staff can still change the billed time when ending a segment. Use 0 for no minimum.</div></div>` +
+  return setBack('Gaming Pricing') + `<div class="card"><label>Default duration for a new gaming line (minutes)</label><input id="gpDefault" type="number" min="30" step="30" value="${s.defaultGamingMinutes||60}"><div class="muted" style="font-size:11px;margin-top:4px">Pre-filled when a gaming setup is added. Staff can always edit it, and nothing is charged beyond what is billed on the line.</div></div>` +
     sts.map(st=>`<div class="card"><b>${esc(setupLabel(st))}</b>${setupPlayers(st).map(n=>`<div class="row" style="gap:8px;margin-top:6px;align-items:center"><span class="muted" style="width:54px;font-size:12px">${n} player${n>1?'s':''}</span><input id="gp-${st.id}-${n}-h" type="number" min="0" value="${(st.rates[n]||[0,0])[0]}"><input id="gp-${st.id}-${n}-f" type="number" min="0" value="${(st.rates[n]||[0,0])[1]}"></div>`).join('')}</div>`).join('') +
     `<div class="muted" style="font-size:11px;margin-bottom:8px">Left box = ₹ per hour, right box = ₹ per 30 minutes. Existing bills keep the rate they were created with.</div>
     <div class="grid2"><button class="btn primary" onclick="saveGamingPricing()">Save pricing</button><button class="btn" onclick="resetGamingPricing()">Reset LVL defaults</button></div>`;
@@ -3139,7 +3238,7 @@ async function screenSetPricing(){
 async function saveGamingPricing(){
   if(!needAdmin()) return; const sts = await dbAll('stations');
   for(const st of sts){ for(const n of setupPlayers(st)){ const h=Number(document.getElementById(`gp-${st.id}-${n}-h`).value), f=Number(document.getElementById(`gp-${st.id}-${n}-f`).value); if(!(h>=0)||!(f>=0)){ tell('Enter valid rates.'); return; } st.rates[n]=[h,f]; } await dbPut('stations', st); }
-  const dm = Number(document.getElementById('gpDefault').value); const mb = Number(document.getElementById('gpMin').value); await patchSettings({ defaultGamingMinutes: dm>0?Math.round(dm):60, minBillMinutes: mb>=0?Math.round(mb):60 });
+  const dm = Number(document.getElementById('gpDefault').value); await patchSettings({ defaultGamingMinutes: dm>0?Math.round(dm):60 });
   showToast('Pricing saved'); render();
 }
 async function resetGamingPricing(){

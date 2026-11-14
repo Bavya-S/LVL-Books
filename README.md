@@ -231,3 +231,23 @@ be sent automatically. The Admin PIN is a convenience lock per device.
 
 ### Version 7.1 — minimum billing
 Ending a gaming segment now pre-fills at least 60 minutes (10, 30, 45, 59 or 60 minutes played → 60 billed). Time beyond 60 still rounds up to 30-minute blocks (2-minute grace). Staff can edit the billed time in the End dialog (single or End All). The minimum itself is editable under More → Gaming Pricing (0 = no minimum).
+
+## Version 8 — Zoho Books-style Add Invoice / Start Session
+- **Start Session / Add Invoice screen:** fixed header (✕ cancel · title · green ✓ save), compact Customer Details card (optional customer + contact; billing/shipping address and e-mail removed), ITEM DETAILS with "Remove or Reorder", each line showing name, amount and quantity × rate, green "+ Add new line", totals card (Sub Total, Discount, Adjustment, TCS, TDS, Edit, Total INR), Invoice Details (date, terms, due date, invoice number, order number, salesperson, subject) and the gaming session details (start, actual vs billable time, station, running timers and End / Extend / Players / Switch controls).
+- **Items screen:** searchable catalogue of gaming variants, food, beverages, combos, overtime and accompanying-person charges, with category chips.
+- **Item Information screen:** item selector, description, quantity with − / + / clear, rate (decimals allowed); ✓ saves the line and returns straight to Add Invoice; Back discards unsaved edits. Tapping a saved line edits that same line (no duplicates). Prices are snapshotted on the line.
+- **Navigation stack:** Dashboard → Session → Items → Item Information; the Android Back button/gesture, the on-screen back arrow and ✕ all behave the same, and the Dashboard is always the last screen before the Exit confirmation.
+- Totals: Total = Sub Total − Discount (gaming only) + Tax + Adjustment + TCS − TDS, computed in whole rupees. Invoice view, print/WhatsApp text and Reports carry the adjustment and TCS.
+- The 60-minute minimum billing for ended gaming segments is unchanged.
+
+## Version 9 — simplified gaming sessions
+- **Fixed billing item:** a gaming item you add carries its own duration and price (default 1 hour). Real elapsed time never changes the price. There is no End Timer / End Segment action and checkout no longer requires one; invoicing closes any running timer automatically, keeping its timestamps and leaving minutes and price untouched.
+- **Dashboard → Active Sessions:** each card has only Edit, Checkout and Cancel Session (the whole card still opens the session). Pause, End Gaming, Add Item/Segment and Edit Bill buttons are gone.
+- **Inside a session:** each gaming item has only +10m, +30m and +1h. Each tap adds that time at the item's hourly rate and shows the new duration and price immediately. Switch, Players (cluster), Copy and End were removed. Delete asks for confirmation; re-adding creates a new independent line.
+- **Time-up alert:** a dismissible banner with Extend (+10m / +30m / +1h) and Dismiss. It never changes a bill by itself.
+- Removed the "minimum billed time on End" setting, which no longer applies; the default new gaming item is still 60 minutes.
+
+## Version 10 — simpler items, payment cards, blue theme
+- **No time-extension buttons:** +10m / +30m / +1h are gone everywhere (item rows and the time-up banner). A gaming item stays exactly as added; change its duration or price by tapping it (Item Information), or delete it and add a new one. The time-up banner now offers "Edit item" and "Dismiss" and never changes a bill.
+- **Checkout payment cards:** Cash, UPI, Bank Transfer, Card, Other and Pay later are large selectable tiles; the chosen one is highlighted in blue with a check mark. Nothing is pre-selected silently. Finalizing with no method asks "No payment method is selected… saved as UNPAID", and a partial payment names the methods recorded. "+ Split between methods" gives each split row its own tiles and amount. The chosen method(s) are saved on the invoice and credited to the matching account.
+- **Blue Start Session:** the Start Session, Items, Item Information and Checkout screens now use the app's existing brand blue token (`--accent`, #5b8def) instead of green. Other screens keep their existing theme; success/balance-cleared text keeps a green `--ok` colour.
