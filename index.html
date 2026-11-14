@@ -200,6 +200,49 @@ html,body{overscroll-behavior-y:contain}
 .tu button{touch-action:manipulation}
 ::-webkit-scrollbar{width:0;height:0}
 @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important;scroll-behavior:auto!important} }
+
+/* ---- Reports dashboard ---- */
+.app.wide{max-width:1120px}
+.rp .chips{display:flex;flex-wrap:wrap;gap:6px}.rp .chips .chip{margin:0}
+.rp-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:6px 0 12px}
+.rp-kpis.small{margin:0 0 6px}
+@media(min-width:640px){.rp-kpis{grid-template-columns:repeat(4,1fr)}}
+.rp-kpi{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
+.rp-kpi .l{font-size:11px;color:var(--muted)}.rp-kpi .v{font-size:19px;font-weight:650;margin-top:2px;overflow-wrap:anywhere}.rp-kpi .s{font-size:10.5px;color:var(--muted);margin-top:2px}
+.rp-grid{display:grid;grid-template-columns:1fr;gap:0}
+@media(min-width:900px){.rp-grid{grid-template-columns:1fr 1fr;gap:10px}}
+.rp-card .rp-h{font-weight:600;margin-bottom:8px}
+.rp-sub{font-size:12px;color:var(--muted);margin:14px 0 6px;font-weight:600}
+.rp-pie{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center}
+.rp-pie svg{width:190px;height:190px;flex:none}
+.rp-pie svg path[data-tip]:hover,.rp-pie svg path[data-tip]:focus{opacity:.85;outline:none}
+.rp-legend{flex:1 1 190px;min-width:0}
+.rp-lg{display:grid;grid-template-columns:12px 1fr auto 52px;gap:6px;align-items:center;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line)}
+.rp-lg i,.rp-key i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.rp-lg .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rp-lg .v{text-align:right}.rp-lg .p{text-align:right;color:var(--muted)}
+.rp-key{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-top:6px}.rp-key i{margin-right:5px}
+.rp-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.rp-table{min-width:100%}.rp-table th{font-size:11px;color:var(--muted);text-align:left;font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.rp-table th.right{text-align:right}.rp-table td{padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.rp-table td:nth-child(3),.rp-table td:nth-child(4){white-space:normal}
+.rp-table:not(thead):not(:has(thead)) td{white-space:normal}.rp-table:not(:has(thead)) td.right{white-space:nowrap;text-align:right}
+.rp-hb{margin:7px 0}.rp-hb .t{display:flex;justify-content:space-between;gap:8px;font-size:12.5px}.rp-hb .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rp-hb small{color:var(--muted)}
+.rp-hb .bar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;margin-top:3px}.rp-hb .bar i{display:block;height:100%;border-radius:4px}
+.rp-empty{padding:12px 0;font-size:13px}
+.rp-gran{font-size:12px;margin:-4px 0 8px}.rp-gran .chip{padding:4px 9px;font-size:12px}
+.rp-print-only{display:none}
+#chartTip{position:fixed;z-index:60;pointer-events:none;background:var(--text);color:var(--bg);border-radius:6px;padding:6px 9px;font-size:12px;line-height:1.35;max-width:240px;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+#chartTip[hidden]{display:none}
+@media print{
+  :root:root:root{--bg:#fff;--panel:#fff;--panel2:#f3f4f6;--text:#111;--muted:#555;--line:#ccc}
+  body{background:#fff!important;color:#111!important}
+  .topbar,.navbar,#navbar,.rp-noprint,#ptr,#topProg,.toast,#chartTip,#dlgRoot,.netchip{display:none!important}
+  .app,.app.wide{max-width:none;padding:0}
+  .rp-print-only{display:block;margin-bottom:10px}
+  .rp-card,.rp-kpi{break-inside:avoid}
+  .rp-scroll{overflow:visible}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
 </style>
 </head>
 <body>
@@ -212,7 +255,7 @@ html,body{overscroll-behavior-y:contain}
 /* Same async API as the single-device version (dbAll/dbGet/dbPut/dbDel/dbClear/dbIncrement), so the app
    logic is identical. Every collection is mirrored in an in-memory cache kept fresh by onSnapshot listeners:
    reads are free and instant, and every phone sees every change within about a second.
-   Invoices, sessions and stock movements are loaded for the last 120 days only, so Firestore usage stays small
+   Invoices and sessions are loaded for the last 120 days only, so Firestore usage stays small
    for years (daily totals live forever in dailyRecords; older invoices are still fetched one-by-one when opened). */
 function fb(){ return window.__fb; }
 function waitForFirebase(){
@@ -225,7 +268,7 @@ function waitForFirebase(){
 const KEYPATH = { customers:'mobile', bsessions:'id', invoices:'id', products:'id', expenses:'id', settings:'key', vendors:'id', purchases:'id',
   employees:'id', employeeTx:'id', accounts:'name', dailyRecords:'date', stations:'id', inventoryTx:'id', physical:'id', deletedInvoices:'id', auditLog:'id' };
 const AUTOINC = new Set(['bsessions','invoices','products','expenses','vendors','purchases','employees','employeeTx','stations','inventoryTx','physical','auditLog']);
-const WINDOWED = { invoices:{field:'date',days:120}, bsessions:{field:'startTime',days:120}, inventoryTx:{field:'date',days:120} };
+const WINDOWED = { invoices:{field:'date',days:120}, bsessions:{field:'startTime',days:120} };
 const __cache = {}, __ready = {};
 function clean(v){ return v===undefined ? v : JSON.parse(JSON.stringify(v)); }   // deep copy; also strips undefined (Firestore rejects it)
 function writeAck(p){   // never let a missing signal freeze the UI: wait briefly for the server, then continue (the write is queued locally)
@@ -335,29 +378,29 @@ function setupVariants(st){ return setupPlayers(st).filter(n=>!(st.variantOff &&
 function defaultCategory(st){ return st.type==='pc' ? 'Gaming — Gaming PCs' : 'Gaming — '+setupLabel(st); }
 /* type: food | beverage | combo | merch | other | overtime | accompany */
 const DEFAULT_PRODUCTS = [
- {name:'Classic Fries',cat:'Veg Bites',type:'food',unit:'plate',price:95,stock:50,min:10,trackStock:true,active:true},
- {name:'Peri Peri Fries',cat:'Veg Bites',type:'food',unit:'plate',price:100,stock:50,min:10,trackStock:true,active:true},
- {name:'Veg Nuggets (6 pcs)',cat:'Veg Bites',type:'food',unit:'plate',price:120,stock:40,min:10,trackStock:true,active:true},
- {name:'Veg Fingers (6 pcs)',cat:'Veg Bites',type:'food',unit:'plate',price:120,stock:40,min:10,trackStock:true,active:true},
- {name:'Fried Paneer Momos (6 pcs)',cat:'Veg Bites',type:'food',unit:'plate',price:130,stock:30,min:10,trackStock:true,active:true},
- {name:'Chicken Cup Noodles',cat:'Non-Veg Delights',type:'food',unit:'cup',price:80,stock:40,min:10,trackStock:true,active:true},
- {name:'Chicken Bites (6 pcs)',cat:'Non-Veg Delights',type:'food',unit:'plate',price:120,stock:40,min:10,trackStock:true,active:true},
- {name:'Fried Chicken Momos (6 pcs)',cat:'Non-Veg Delights',type:'food',unit:'plate',price:140,stock:30,min:10,trackStock:true,active:true},
- {name:'Chicken Loaded Fries',cat:'Non-Veg Delights',type:'food',unit:'plate',price:150,stock:30,min:10,trackStock:true,active:true},
- {name:'Chicken Popcorn (12 pcs)',cat:'Non-Veg Delights',type:'food',unit:'plate',price:160,stock:30,min:10,trackStock:true,active:true},
- {name:'Chicken Nuggets (8 pcs)',cat:'Non-Veg Delights',type:'food',unit:'plate',price:160,stock:30,min:10,trackStock:true,active:true},
- {name:'Sprite',cat:'Beverages',type:'beverage',unit:'bottle',price:20,stock:100,min:20,trackStock:true,active:true},
- {name:'Fanta',cat:'Beverages',type:'beverage',unit:'bottle',price:20,stock:100,min:20,trackStock:true,active:true},
- {name:'Pepsi',cat:'Beverages',type:'beverage',unit:'bottle',price:20,stock:100,min:20,trackStock:true,active:true},
- {name:'Mazza',cat:'Beverages',type:'beverage',unit:'bottle',price:20,stock:100,min:20,trackStock:true,active:true},
- {name:'Veg Combo',cat:'Combos',type:'combo',unit:'combo',price:249,ref:300,stock:0,min:0,trackStock:false,active:true,combo:'veg',
+ {name:'Classic Fries',cat:'Veg Bites',type:'food',unit:'plate',price:95,active:true},
+ {name:'Peri Peri Fries',cat:'Veg Bites',type:'food',unit:'plate',price:100,active:true},
+ {name:'Veg Nuggets (6 pcs)',cat:'Veg Bites',type:'food',unit:'plate',price:120,active:true},
+ {name:'Veg Fingers (6 pcs)',cat:'Veg Bites',type:'food',unit:'plate',price:120,active:true},
+ {name:'Fried Paneer Momos (6 pcs)',cat:'Veg Bites',type:'food',unit:'plate',price:130,active:true},
+ {name:'Chicken Cup Noodles',cat:'Non-Veg Delights',type:'food',unit:'cup',price:80,active:true},
+ {name:'Chicken Bites (6 pcs)',cat:'Non-Veg Delights',type:'food',unit:'plate',price:120,active:true},
+ {name:'Fried Chicken Momos (6 pcs)',cat:'Non-Veg Delights',type:'food',unit:'plate',price:140,active:true},
+ {name:'Chicken Loaded Fries',cat:'Non-Veg Delights',type:'food',unit:'plate',price:150,active:true},
+ {name:'Chicken Popcorn (12 pcs)',cat:'Non-Veg Delights',type:'food',unit:'plate',price:160,active:true},
+ {name:'Chicken Nuggets (8 pcs)',cat:'Non-Veg Delights',type:'food',unit:'plate',price:160,active:true},
+ {name:'Sprite',cat:'Beverages',type:'beverage',unit:'bottle',price:20,active:true},
+ {name:'Fanta',cat:'Beverages',type:'beverage',unit:'bottle',price:20,active:true},
+ {name:'Pepsi',cat:'Beverages',type:'beverage',unit:'bottle',price:20,active:true},
+ {name:'Mazza',cat:'Beverages',type:'beverage',unit:'bottle',price:20,active:true},
+ {name:'Veg Combo',cat:'Combos',type:'combo',unit:'combo',price:249,ref:300,active:true,combo:'veg',
    desc:'6 nuggets, 4 fingers, peri peri fries + 2 beverages of choice'},
- {name:'Non-Veg Combo',cat:'Combos',type:'combo',unit:'combo',price:299,ref:350,stock:0,min:0,trackStock:false,active:true,combo:'nonveg',
+ {name:'Non-Veg Combo',cat:'Combos',type:'combo',unit:'combo',price:299,ref:350,active:true,combo:'nonveg',
    desc:'6 nuggets, 10 popcorn, peri peri fries + 2 beverages of choice'},
 ];
 const SPECIAL_PRODUCTS = [
- {name:'Overtime Charges',cat:'Charges',type:'overtime',unit:'10-min block',price:10,stock:0,min:0,trackStock:false,active:true},
- {name:'Accompanying Person',cat:'Charges',type:'accompany',unit:'person/hour',price:50,stock:0,min:0,trackStock:false,active:true},
+ {name:'Overtime Charges',cat:'Charges',type:'overtime',unit:'10-min block',price:10,active:true},
+ {name:'Accompanying Person',cat:'Charges',type:'accompany',unit:'person/hour',price:50,active:true},
 ];
 const DEFAULT_SETTINGS = {
   businessName:'LVL Gaming Café', phone:'', address:'', email:'', gstin:'',
@@ -402,7 +445,6 @@ function normMobile(raw){
 }
 function waLink(mobile10, text){ return 'https://wa.me/91'+mobile10+'?text='+encodeURIComponent(text); }
 function stationName(st){ return st ? setupLabel(st) : 'Unknown setup'; }
-function isTracked(p){ return p && p.trackStock!==false && p.combo===undefined && p.type!=='combo' && p.type!=='overtime' && p.type!=='accompany'; }
 function bucketForType(t){ return t==='food'||t==='beverage'||t==='combo' ? 'food' : 'other'; }
 
 /* Duration: integer minutes internally. Input may be minutes or decimal hours. */
@@ -458,7 +500,9 @@ function overtimeUnitLabel(s){
   return (s.overtimeBlockMinutes||10)+'-min block';
 }
 
-const ALL_STORES = ['customers','bsessions','invoices','products','expenses','settings','vendors','purchases','employees','employeeTx','accounts','dailyRecords','stations','inventoryTx','physical','deletedInvoices','auditLog'];
+const ALL_STORES = ['customers','bsessions','invoices','products','expenses','settings','vendors','purchases','employees','employeeTx','accounts','dailyRecords','stations','physical','deletedInvoices','auditLog'];
+/* Inventory was removed from the app. Old stock records are no longer synced or shown, but they stay in the database and in every backup. */
+const BACKUP_STORES = [...ALL_STORES, 'inventoryTx'];
 
 /* ============ CSV export ============ */
 function toCSV(rows){
@@ -473,12 +517,12 @@ function downloadCSV(filename, rows){
   a.href=url; a.download=filename; a.click();
 }
 async function exportAllCSV(){
-  const stores = ['customers','bsessions','invoices','products','expenses','vendors','purchases','employees','stations','inventoryTx'];
+  const stores = ['customers','bsessions','invoices','products','expenses','vendors','purchases','employees','stations'];
   for(const s of stores){ downloadCSV(`LVL-${s}.csv`, await dbAll(s)); await new Promise(r=>setTimeout(r,250)); }
 }
 
 /* ============ App state ============ */
-let state = { screen:'dashboard', settings:null, custProfile:null, vendorId:null, reportRange:'today', reportStart:null, reportEnd:null, sessionId:null, billEdSid:null, sessFilter:'open', invFilter:'all', ckForm:null, ckSession:null, invoiceId:null, finalizing:false, afterEnd:null, pick:null, pendingScroll:null, adm:{ tab:'active', q:'', from:'', to:'', status:'all', method:'all', sel:{} } };
+let state = { rep:{ range:'month', from:null, to:null, tab:'overview', gran:'auto', f:{} }, screen:'dashboard', settings:null, custProfile:null, vendorId:null, reportRange:'today', reportStart:null, reportEnd:null, sessionId:null, billEdSid:null, sessFilter:'open', invFilter:'all', ckForm:null, ckSession:null, invoiceId:null, finalizing:false, afterEnd:null, pick:null, pendingScroll:null, adm:{ tab:'active', q:'', from:'', to:'', status:'all', method:'all', sel:{} } };
 
 async function loadSettingsAndSeed(){
   let s = await dbGet('settings','main');
@@ -492,7 +536,6 @@ async function loadSettingsAndSeed(){
     let ch=false;
     if(!p.type){ p.type = p.combo!==undefined ? 'combo' : (p.cat==='Beverages' ? 'beverage' : 'food'); ch=true; }
     if(p.unit===undefined){ p.unit = p.type==='beverage' ? 'bottle' : 'pc'; ch=true; }
-    if(p.trackStock===undefined){ p.trackStock = p.type!=='combo'; ch=true; }
     if(p.active===undefined){ p.active=true; ch=true; }
     if(ch) await dbPut('products', p);
   }
@@ -534,7 +577,7 @@ async function boot(){
   await loadSettingsAndSeed();
   await maybeAutoBackup();
   setupManifestAndInstall();
-  setupNavigation(); setupPullToRefresh();
+  setupNavigation(); setupPullToRefresh(); setupChartTips();
   bootDone = true;
   render();
 }
@@ -600,7 +643,6 @@ async function triggerInstall(){
 const NAV = [
   {id:'dashboard', ic:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>', label:'Dashboard'},
   {id:'gaming', ic:'<svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="11" rx="4"/><path d="M7 10v5M4.5 12.5h5"/><circle cx="16" cy="11.5" r="1"/><circle cx="18.5" cy="14" r="1"/></svg>', label:'Sessions'},
-  {id:'inventory', ic:'<svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>', label:'Inventory'},
   {id:'invoices', ic:'<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7M9 8h3"/></svg>', label:'Invoices'},
   {id:'more', ic:'<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>', label:'More'},
 ];
@@ -612,11 +654,11 @@ function renderNav(){
    navStack is the in-memory Back stack (screens you can go Back to). The Android Back button / gesture arrives as a browser
    'popstate'; a guard history entry makes sure every Back press is caught by the app instead of closing it.
    Active gaming sessions live in the database, so navigating Back never discards one. */
-const NAV_TABS = ['dashboard','gaming','inventory','invoices','more'];
+const NAV_TABS = ['dashboard','gaming','invoices','more'];
 const NAV_IDENTITY = ['sessionId','invoiceId','custProfile','vendorId','empId'];
 let navStack = [];                       // previous screens, most recent last
 let navCur = { screen:'dashboard', scrollY:0 };   // identity of the screen on display
-let navBusy = false, navExiting = false, navExitStep = 0;
+let navBusy = false, navBusyAt = 0, navExiting = false, navExitStep = 0;
 function navSnap(){
   const e = { screen:state.screen, scrollY:Math.round(window.scrollY||0) };
   NAV_IDENTITY.forEach(k=>{ if(state[k]!==undefined && state[k]!==null) e[k]=state[k]; });
@@ -678,7 +720,7 @@ function dismissTopLayer(){   // dialogs first, then bottom sheets
   return false;
 }
 async function handleBack(){
-  if(navBusy) return; navBusy = true;
+  if(navBusy && Date.now()-navBusyAt < 2500) return; navBusy = true; navBusyAt = Date.now();
   try{
     if(dismissTopLayer()) return;
     if(state.screen==='dashboard' && !navStack.length){
@@ -690,8 +732,10 @@ async function handleBack(){
 }
 function exitApp(){
   try{ const A = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App; if(A && A.exitApp){ A.exitApp(); return; } }catch(e){}
-  navExiting = true; navExitStep = 0; history.back();   // steps back past the guard entry, which closes an installed Android app
-  setTimeout(()=>{ if(!document.hidden){ navExiting=false; try{ history.pushState({lvl:'app'},''); }catch(e){} showToast('Use the Android Home button to leave the app'); } }, 1600);
+  navExiting = true; navExitStep = 0;
+  const i = (history.state && typeof history.state.i==='number') ? history.state.i : 1;
+  try{ history.go(-(i+1)); }catch(e){ history.back(); }   // jump back past every app history entry in one step, which closes an installed Android app
+  setTimeout(()=>{ if(!document.hidden){ navExiting=false; histFill(true); showToast('Use the Android Home button to leave the app'); } }, 1800);
 }
 
 /* ============ Refresh in place · route restore · pull-to-refresh · offline chip ============ */
@@ -716,18 +760,19 @@ function saveRoute(){
     const y = Math.round(window.scrollY||0);
     const a = state.adm||{};
     sessionStorage.setItem(ROUTE_KEY, JSON.stringify({ v:2, ts:Date.now(), cur:Object.assign({}, navCur, {scrollY:y}), stack:navStack, y,
-      ck:state.ckForm, pick:state.pick, sessFilter:state.sessFilter, invFilter:state.invFilter, reportRange:state.reportRange, reportStart:state.reportStart, reportEnd:state.reportEnd,
+      ck:state.ckForm, pick:state.pick, sessFilter:state.sessFilter, invFilter:state.invFilter, rep:state.rep,
       adm:{ tab:a.tab, q:a.q, from:a.from, to:a.to, status:a.status, method:a.method } }));
   }catch(e){}
 }
 function restoreRoute(){
   let r = null; try{ r = JSON.parse(sessionStorage.getItem(ROUTE_KEY)||'null'); }catch(e){}
-  if(!r || r.v!==2 || !r.cur || !r.cur.screen || Date.now()-r.ts > 12*3600*1000) return;
+  if(!r || r.v!==2 || !r.cur || !r.cur.screen || r.cur.screen==='inventory' || Date.now()-r.ts > 12*3600*1000) return;
   NAV_IDENTITY.forEach(k=>{ if(r.cur[k]!==undefined) state[k]=r.cur[k]; });
   state.screen = r.cur.screen; navCur = Object.assign({}, r.cur); navStack = Array.isArray(r.stack) ? r.stack : []; state.pendingScroll = r.y||0;
   if(r.ck) state.ckForm = r.ck;
   if(r.pick) state.pick = Object.assign(r.pick, { busy:false, lock:false });
-  ['sessFilter','invFilter','reportRange','reportStart','reportEnd'].forEach(k=>{ if(r[k]!==undefined && r[k]!==null) state[k]=r[k]; });
+  ['sessFilter','invFilter'].forEach(k=>{ if(r[k]!==undefined && r[k]!==null) state[k]=r[k]; });
+  if(r.rep && typeof r.rep==='object') state.rep = Object.assign({ range:'month', from:null, to:null, tab:'overview', gran:'auto', f:{} }, r.rep);
   if(r.adm) Object.assign(state.adm, r.adm, { sel:{} });
 }
 { let t=null; const later = ()=>{ clearTimeout(t); t=setTimeout(saveRoute,250); };
@@ -790,21 +835,32 @@ function setupPullToRefresh(){
   document.addEventListener('touchend', end, {passive:true}); document.addEventListener('touchcancel', reset, {passive:true});
 }
 
+/* ---- History layer ----
+   Chrome (Android) skips history entries that were created without a tap ("history manipulation intervention"), so an entry
+   pushed from inside a popstate handler is skipped by the next Back press and the app closes. Therefore the app never relies on
+   re-pushing after Back: it keeps a buffer of HIST_BUF entries, every one created inside a real tap, and tops the buffer up on
+   the next tap after any Back press. */
+const HIST_BUF = 12;
+function histIdx(){ const h = history.state; return h && typeof h.i==='number' ? h.i : 0; }
+function histFill(force){
+  try{
+    const i = histIdx();
+    if(i >= HIST_BUF) return;
+    if(!force && !(navigator.userActivation ? navigator.userActivation.isActive : true)) return;   // only entries created inside a tap are reliable
+    for(let k=i+1;k<=HIST_BUF;k++) history.pushState({lvl:'app', i:k}, '');
+  }catch(e){}
+}
 function setupNavigation(){
   try{ history.scrollRestoration = 'manual'; }catch(e){}   // the app restores scroll itself; the browser's own restore would reset it to 0
   try{
     const hs = history.state;
-    if(hs && hs.lvl==='app'){ /* the page was refreshed: its guard entries are still in place — add nothing */ }
-    else if(hs && hs.lvl==='guard'){ history.pushState({lvl:'app'},''); }
-    else { history.replaceState({lvl:'guard'},''); history.pushState({lvl:'app'},''); }
+    if(hs && hs.lvl==='app'){ /* the page was refreshed: its history entries are still in place — add nothing */ }
+    else { history.replaceState({lvl:'base', i:0}, ''); history.pushState({lvl:'app', i:1}, ''); }
   }catch(e){}
-  // Chrome ignores history entries created without a user gesture when Back is pressed (that is what lets Back quit the app).
-  // Add one entry on the first real tap so Back is always delivered to the app.
-  const arm = ()=>{ try{ if(!(history.state && history.state.act)) history.pushState({lvl:'app',act:1},''); }catch(e){} ['pointerup','keyup'].forEach(t=>document.removeEventListener(t,arm,true)); };
-  ['pointerup','keyup'].forEach(t=>document.addEventListener(t,arm,true));
+  ['pointerup','keyup','touchend'].forEach(t=>document.addEventListener(t, ()=>histFill(false), true));
   window.addEventListener('popstate', ()=>{
-    if(navExiting){ if(navExitStep++<8){ try{ history.back(); }catch(e){} } return; }   // keep stepping back past every guard entry
-    try{ history.pushState({lvl:'app'},''); }catch(e){}   // re-arm the guard so the next Back is caught too
+    if(navExiting){ return; }
+    if(histIdx() <= 0) histFill(true);       // reached the bottom entry without a tap in between: best-effort refill so Back is still caught
     handleBack();
   });
   document.addEventListener('keydown', e=>{ if(e.key==='Escape' && dismissTopLayer()) e.preventDefault(); });
@@ -818,7 +874,7 @@ async function render(){
   const seq = ++__renderSeq;
   renderNav();
   const root = document.getElementById('root');
-  const SCREENS = { dashboard:screenDashboard, gaming:screenGaming, inventory:screenInventory, invoices:screenInvoices, more:screenMore,
+  const SCREENS = { dashboard:screenDashboard, gaming:screenGaming, invoices:screenInvoices, more:screenMore,
     customers:screenCustomers, customerProfile:screenCustomerProfile, expenses:screenExpenses, settings:screenSettings, backup:screenBackup,
     vendors:screenVendors, vendorProfile:screenVendorProfile, purchases:screenPurchases, employees:screenEmployees, employeeProfile:screenEmployeeProfile,
     cashbank:screenCashBank, reports:screenReports, session:screenSession, checkout:screenCheckout, invoiceView:screenInvoiceView,
@@ -833,6 +889,7 @@ async function render(){
       <p class="muted" style="font-size:12px;margin:8px 0">${esc(err && err.message ? err.message : err)}</p><button class="btn primary" onclick="go('dashboard')">Back to Dashboard</button></div>`;
   }
   if(seq !== __renderSeq) return;   // a newer render started meanwhile — never paint a stale one (prevents duplicated content)
+  root.classList.toggle('wide', state.screen==='reports');
   document.body.classList.toggle('nonav', ['picker','checkout'].includes(state.screen));
   document.body.classList.toggle('hasfoot', ['picker','checkout'].includes(state.screen));
   document.body.classList.toggle('tall', state.screen==='picker');
@@ -1568,7 +1625,6 @@ async function screenDashboard(){
   const expTotal = todayExp.reduce((s,e)=>s+e.amount,0);
   const receivable = invoices.reduce((s,i)=>s+Math.max(0,invoiceBalance(i)),0);
   const activeSetups = open.reduce((n,x)=>n+x.lines.filter(l=>l.kind==='gaming'&&l.state!=='ended').length,0);
-  const lowStock = (await dbAll('products')).filter(p=>isTracked(p) && p.active!==false && p.stock<=p.min);
   const recTemplates = (await dbAll('expenses')).filter(e=>e.isTemplate && e.nextDue<=Date.now());
   return `
   <button class="btn primary" style="margin-bottom:12px;min-height:50px" onclick="startSession()">Start Session</button>
@@ -1590,8 +1646,7 @@ async function screenDashboard(){
     <button class="btn" onclick="go('reports')">Reports</button>
     <button class="btn" onclick="go('gaming')">All Sessions</button>
   </div>
-  ${recTemplates.length? `<div class="section-title">Recurring Due</div><div class="card">${recTemplates.map(r=>`<div class="list-item"><span>${esc(r.category)} · ${fmt(r.amount)}</span><button class="btn sm" onclick="logRecurring(${r.id})">Log Payment</button></div>`).join('')}</div>`:''}
-  ${lowStock.length? `<div class="section-title">Low Stock</div><div class="card">${lowStock.map(p=>`<div class="list-item"><span>${esc(p.name)}</span><span class="pill amber">${p.stock} left</span></div>`).join('')}</div>` : ''}`;
+  ${recTemplates.length? `<div class="section-title">Recurring Due</div><div class="card">${recTemplates.map(r=>`<div class="list-item"><span>${esc(r.category)} · ${fmt(r.amount)}</span><button class="btn sm" onclick="logRecurring(${r.id})">Log Payment</button></div>`).join('')}</div>`:''}`;
 }
 
 /* ============ Sessions list ============ */
@@ -1723,9 +1778,6 @@ async function finalizeCheckout(){
   }catch(e){ if(!e.silent) tell(e.message||String(e)); }
   finally{ state.finalizing=false; const b=document.getElementById('ckFinalize'); if(b){ b.disabled=false; b.style.opacity='1'; } }
 }
-async function dbLogInv(p, qty, reason, ref, date){
-  try{ await createRecord('inventoryTx', { productId:p.id, name:p.name, qty, reason, ref:ref||'', stockAfter:p.stock, date:date||Date.now() }); }catch(e){ console.error('inventory log failed', e); }
-}
 /* The ONE place an invoice is created. Used by checkout and by demo data. */
 async function finalizeSessionCore(f, opts){
   opts = opts||{};
@@ -1773,12 +1825,6 @@ async function finalizeSessionCore(f, opts){
     c.visits+=1; c.gamingSessions+=gl.length; c.gamingHours+=inv.durationMins/60;
     c.gamingSpend+=t.gaming+t.accompany+t.overtime; c.foodSpend+=t.food; c.totalSpend+=t.grand; c.lastVisit=nowIso; c.invoiceIds.push(inv.id);
     await dbPut('customers', c);
-  });
-  await soft(async()=>{
-    const names = [];
-    for(const l of lines){ if(l.kind==='item' && l.itemId){ const p=await dbGet('products', l.itemId); if(isTracked(p)){ p.stock=Math.max(0,p.stock-l.qty); await dbPut('products',p); await dbLogInv(p,-l.qty,'sale',number,date); } }
-      if(l.included) l.included.forEach(b=>names.push(b)); }
-    if(names.length){ const prods=await dbAll('products'); for(const b of names){ const p=prods.find(x=>x.name===b && isTracked(x)); if(p){ const fresh=await dbGet('products',p.id); fresh.stock=Math.max(0,fresh.stock-1); await dbPut('products',fresh); await dbLogInv(fresh,-1,'combo drink',number,date); } } }
   });
   await soft(async()=>{ for(const p of payments) await creditAccount(p.method, p.amount); });
   await soft(async()=>{ await updateDailyRecord(dateKey(date)); });
@@ -2029,34 +2075,23 @@ async function admAdjustCustomer(inv, sign){
   c.invoiceIds = (c.invoiceIds||[]).filter(x=>x!==inv.id); if(sign>0) c.invoiceIds.push(inv.id);
   await dbPut('customers', c); return true;
 }
-async function admStockMove(inv, sign){   // sign +1: return sold items to stock · -1: take them out again (restore)
-  let n = 0;
-  const move = async(p, qty)=>{ if(!p || !isTracked(p)) return; const fresh = await dbGet('products', p.id); fresh.stock = Math.max(0, fresh.stock + sign*qty); await dbPut('products', fresh); await dbLogInv(fresh, sign*qty, sign>0?'invoice deleted':'invoice restored', inv.number); n++; };
-  const prods = await dbAll('products');
-  for(const l of inv.lines||[]){
-    if(l.kind==='item' && l.itemId) await move(prods.find(x=>x.id===l.itemId), l.qty);
-  }
-  for(const l of inv.lines||[]){ for(const b of (l.included||[])) await move(prods.find(x=>x.name===b && isTracked(x)), 1); }
-  return n;
-}
 async function admAudit(action, inv, extra){
   try{ await createRecord('auditLog', Object.assign({ ts:Date.now(), action, invoiceId:inv.id, number:inv.number, amount:inv.grandTotal, customerName:inv.customerName||'', by:isAdmin()?'Admin':'Staff' }, extra||{})); }
   catch(e){ console.error('audit log failed', e); }
 }
 
-/* Soft delete. Options: reason, reverseAccounts, returnStock, sessionMode ('reopen' | 'cancel'), pin. */
+/* Soft delete. Options: reason, reverseAccounts, sessionMode ('reopen' | 'cancel'), pin. */
 async function deleteInvoiceCore(id, o){
   o = o||{}; await admAuthorize(o.pin);
   const inv = await dbGet('invoices', id); if(!inv) throw new Error('Invoice not found — it may already have been deleted.');
   const paid = invoicePaid(inv); const reason = (o.reason||'').trim();
   if(paid>0 && !reason) throw new Error(`${inv.number} has payments recorded. Enter a reason for deleting it.`);
-  const rec = { id:inv.id, number:inv.number, amount:inv.grandTotal, paidAtDelete:paid, customerName:inv.customerName||'', customerMobile:inv.customerMobile||'', invoiceDate:inv.date, deletedAt:Date.now(), deletedBy:'Admin', reason, actions:{ accountsReversed:[], stockReturned:0, customerAdjusted:false, session:null }, warnings:[], invoice:inv };
+  const rec = { id:inv.id, number:inv.number, amount:inv.grandTotal, paidAtDelete:paid, customerName:inv.customerName||'', customerMobile:inv.customerMobile||'', invoiceDate:inv.date, deletedAt:Date.now(), deletedBy:'Admin', reason, actions:{ accountsReversed:[], customerAdjusted:false, session:null }, warnings:[], invoice:inv };
   await dbPut('deletedInvoices', rec);   // archive FIRST — if this fails nothing else has been touched
   const actions = rec.actions, warnings = rec.warnings;   // dbPut deep-copies nested objects onto rec, so track changes on THESE
   const step = async(label, fn)=>{ try{ await fn(); }catch(e){ console.error('delete step failed:', label, e); warnings.push(label+': '+(e&&e.message?e.message:e)); } };
   if(o.reverseAccounts!==false) await step('account balances', async()=>{ for(const p of invPayTotals(inv)){ if(p.amount>0) await debitAccount(p.method, p.amount); else await creditAccount(p.method, -p.amount); actions.accountsReversed.push(p); } });
   await step('customer totals', async()=>{ actions.customerAdjusted = await admAdjustCustomer(inv, -1); });
-  if(o.returnStock!==false) await step('stock', async()=>{ actions.stockReturned = await admStockMove(inv, +1); });
   await step('gaming session', async()=>{
     if(!inv.sessionId) return; const s = await dbGet('bsessions', inv.sessionId); if(!s || s.invoiceId!==inv.id) return;
     const mode = o.sessionMode==='cancel' ? 'cancel' : 'reopen';
@@ -2088,7 +2123,6 @@ async function restoreInvoiceCore(id, o){
   const warnings = []; const step = async(label, fn)=>{ try{ await fn(); }catch(e){ console.error('restore step failed:', label, e); warnings.push(label+': '+(e&&e.message?e.message:e)); } };
   await step('account balances', async()=>{ for(const p of (a.accountsReversed||[])){ if(p.amount>0) await creditAccount(p.method, p.amount); else await debitAccount(p.method, -p.amount); } });
   await step('customer totals', async()=>{ if(a.customerAdjusted) await admAdjustCustomer(inv, +1); });
-  await step('stock', async()=>{ if(a.stockReturned) await admStockMove(inv, -1); });
   await step('gaming session', async()=>{
     if(!sess) return;
     await dbUpdate('bsessions', inv.sessionId, d=>{ d.invoiceId = inv.id; d.invoiceNumber = inv.number; d.finalizedAt = inv.date; d.status = invoiceBalance(inv)<=0 ? 'paid' : 'finalized'; delete d.deletedInvoiceNumber; delete d.cancelReason; delete d.cancelledAt; d.updatedAt = Date.now(); return true; });
@@ -2099,13 +2133,10 @@ async function restoreInvoiceCore(id, o){
   await admAudit('invoice_restore', inv, { warnings });
   return inv;
 }
-/* Permanent deletion — only from the Deleted tab. Removes the archived copy and the stock movements it created; the audit log entry stays. */
+/* Permanent deletion — only from the Deleted tab. Removes the archived copy; the audit log entry stays. */
 async function purgeInvoiceCore(id, o){
   o = o||{}; await admAuthorize(o.pin);
   const rec = await dbGet('deletedInvoices', id); if(!rec) throw new Error('Deleted invoice not found.');
-  if((rec.actions||{}).stockReturned){   // stock was returned and the invoice is gone for good: drop its now-meaningless movements
-    for(const t of await dbAllFresh('inventoryTx')) if(t.ref===rec.number) await dbDel('inventoryTx', t.id);
-  }
   await dbDel('deletedInvoices', id);
   const inv = rec.invoice||{};
   await admAudit('invoice_purge', { id:rec.id, number:rec.number, grandTotal:rec.amount, customerName:rec.customerName }, { reason:(o.reason||rec.reason||''), paid:rec.paidAtDelete, lines:(inv.lines||[]).length, invoiceDate:rec.invoiceDate, deletedAt:rec.deletedAt });
@@ -2184,7 +2215,6 @@ async function adminDeleteModal(ids){
       <div class="list-item"><span>Total amount</span><b>${fmt(total)}</b></div>${paid>0?`<div class="list-item"><span style="color:var(--amber)">Payments recorded</span><b style="color:var(--amber)">${fmt(paid)}</b></div>`:''}</div>
     <p class="muted" style="font-size:12px;margin:6px 0">What happens: the invoice${many?'s are':' is'} removed from invoice lists, the dashboard, reports, outstanding balances and customer history. A full copy is kept under <b>Deleted</b> so it can be restored, and the deletion is recorded in the audit log. No other invoice or transaction is changed.</p>
     <label style="display:flex;gap:8px;align-items:center;margin:8px 0"><input id="adAcc" type="checkbox" checked> Reverse the payments from Cash / UPI / Bank balances</label>
-    <label style="display:flex;gap:8px;align-items:center;margin:8px 0"><input id="adStock" type="checkbox" checked> Return sold items to stock</label>
     ${hasSession?`<label>Linked gaming session</label><select id="adSess"><option value="reopen">Reopen it so it can be billed again</option><option value="cancel">Keep it as a cancelled record</option></select>`:'<input id="adSess" type="hidden" value="reopen">'}
     <label>Reason ${paid>0?'(required — this invoice has payments)':'(optional)'}</label><input id="adReason" placeholder="e.g. duplicate invoice, entered by mistake">
     <label style="display:flex;gap:8px;align-items:center;margin:10px 0 4px;color:var(--red)"><input id="adPerm" type="checkbox"> Delete permanently — it can't be restored</label>
@@ -2194,7 +2224,7 @@ async function adminDeleteModal(ids){
 }
 async function confirmAdminDelete(){
   const g = id=>document.getElementById(id), ids = window.__admDelIds||[];
-  const o = { pin:g('adPin')?g('adPin').value:'', reason:g('adReason').value, reverseAccounts:g('adAcc').checked, returnStock:g('adStock').checked, sessionMode:g('adSess').value, permanent:g('adPerm').checked };
+  const o = { pin:g('adPin')?g('adPin').value:'', reason:g('adReason').value, reverseAccounts:g('adAcc').checked, sessionMode:g('adSess').value, permanent:g('adPerm').checked };
   if(window.__admNeedType || o.permanent){ if(!g('adType') || g('adType').value.trim().toUpperCase()!=='DELETE'){ tell('Type DELETE in the box to confirm.'); return; } }
   if(window.__admNeedReason && !o.reason.trim()){ tell('Enter a reason — these invoices have payments recorded, and the reason is kept in the audit log.'); return; }
   try{ await admAuthorize(o.pin); }catch(e){ tell(e.message); return; }
@@ -2213,7 +2243,7 @@ function adminRestoreModal(id){
   if(!isAdmin()){ tell('Only an administrator can restore invoices.'); return; }
   const r = __admDel.find(x=>x.id===id); if(!r) return;
   openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Restore ${esc(r.number)}?</h3>
-    <p class="muted" style="font-size:13px">${fmt(r.amount)} · ${esc(r.customerName||'')}. The invoice returns with its original number and the changes made when it was deleted (account balances, stock, customer totals, linked session) are re-applied.</p>
+    <p class="muted" style="font-size:13px">${fmt(r.amount)} · ${esc(r.customerName||'')}. The invoice returns with its original number and the changes made when it was deleted (account balances, customer totals, linked session) are re-applied.</p>
     ${admPinField(!!(state.settings||{}).adminPinHash)}
     <div class="grid2" style="margin-top:12px"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="confirmAdminRestore(${id})">Restore invoice</button></div>`);
 }
@@ -2236,24 +2266,9 @@ async function confirmAdminPurge(id){
   catch(e){ tell(e && e.message ? e.message : String(e)); }
 }
 
-/* ============ Inventory ============ */
-async function screenInventory(){
-  const products = (await dbAll('products')).filter(isTracked).sort((a,b)=>(a.cat||'').localeCompare(b.cat||'')||a.name.localeCompare(b.name));
-  const tx = (await dbAll('inventoryTx')).sort((a,b)=>b.date-a.date).slice(0,12);
-  return `<h2>Inventory</h2>
-  <div class="grid2" style="margin-bottom:10px"><button class="btn" onclick="exportInv()">Export CSV</button><button class="btn" onclick="go('set_items')">Manage items</button></div>
-  ${products.length ? products.map(p=>{
-    const status = p.stock<=0?'<span class="pill red">Out of Stock</span>':p.stock<=p.min?'<span class="pill amber">Low Stock</span>':'<span class="pill green">In Stock</span>';
-    return `<div class="card"><div class="list-item"><div><b>${esc(p.name)}</b><br><span class="muted">${esc(p.cat||'')} · ${fmt(p.price)}</span></div>
-      <div style="text-align:right">${status}<br><span class="muted">Stock: ${p.stock}</span></div></div>
-      <div class="row" style="margin-top:8px"><button class="btn sm" onclick="adjustStock(${p.id},-1)">- Stock</button><button class="btn sm" onclick="adjustStock(${p.id},1)">+ Stock</button><button class="btn sm" onclick="adjustStock(${p.id},10)">+10</button></div></div>`; }).join('') : '<div class="empty">No stock-tracked items. Add items in Settings → Items Catalogue.</div>'}
-  ${tx.length?`<div class="section-title">Recent stock movements</div><div class="card">${tx.map(t=>`<div class="list-item"><span>${esc(t.name)}<br><span class="muted" style="font-size:11px">${esc(t.reason)}${t.ref?' · '+esc(t.ref):''} · ${new Date(t.date).toLocaleDateString('en-IN')}</span></span><b style="color:${t.qty<0?'var(--red)':'var(--green)'}">${t.qty>0?'+':''}${t.qty}</b></div>`).join('')}</div>`:''}`;
-}
-async function exportInv(){ downloadCSV('LVL-inventory.csv', await dbAll('products')); }
 async function exportCustomersCSV(){ downloadCSV('LVL-customers.csv', await dbAll('customers')); }
 async function exportExpensesCSV(){ downloadCSV('LVL-expenses.csv', await dbAll('expenses')); }
 async function exportPurchasesCSV(){ downloadCSV('LVL-purchases.csv', await dbAll('purchases')); }
-async function adjustStock(id, delta){ const p = await dbGet('products', id); p.stock = Math.max(0, p.stock+delta); await dbPut('products', p); await dbLogInv(p, delta, 'manual adjustment', '', Date.now()); render(); }
 
 async function creditAccount(payMethod, amount){
   const accName = PAY_TO_ACCOUNT[payMethod] || 'Other';
@@ -2314,6 +2329,7 @@ async function screenExpenses(){
     <label>Category</label>
     <select id="expCat"><option>Electricity</option><option>Internet</option><option>Rent</option><option>Staff</option><option>Maintenance</option><option>Equipment</option><option>Marketing</option><option>Cleaning</option><option>Food supplies</option><option>Transport</option><option>Software</option><option>Other</option></select>
     <label>Description</label><input id="expDesc" placeholder="e.g. Monthly rent">
+    <div class="grid2"><div><label>Vendor / paid to (optional)</label><input id="expVendor" placeholder="e.g. landlord"></div><div><label>Receipt ref. (optional)</label><input id="expReceipt" placeholder="bill / UPI ref"></div></div>
     <label>Amount (₹)</label><input id="expAmt" type="number">
     <label>Payment Method</label><select id="expPay"><option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Other</option></select>
     <label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input type="checkbox" id="expRecurring" style="width:auto" onchange="document.getElementById('freqWrap').style.display=this.checked?'block':'none'"> Recurring expense</label>
@@ -2338,7 +2354,7 @@ async function addExpense(){
     const next = new Date(); if(freq==='Monthly') next.setMonth(next.getMonth()+1); else next.setDate(next.getDate()+7);
     await dbPut('expenses', { category, desc, amount, frequency:freq, isTemplate:true, nextDue: next.getTime(), date: Date.now() });
   } else {
-    await dbPut('expenses', { category, desc, amount, date:Date.now(), payMethod });
+    await dbPut('expenses', { category, desc, amount, date:Date.now(), payMethod, vendor:(document.getElementById('expVendor')||{value:''}).value.trim(), receipt:(document.getElementById('expReceipt')||{value:''}).value.trim() });
     await debitAccount(payMethod, amount);
     await updateDailyRecord(dateKey(Date.now()));
   }
@@ -2419,17 +2435,18 @@ function renderPurchaseCart(){
 async function addPurchaseLine(){
   const products = await dbAll('products');
   openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Add Purchase Item</h3>
-    <label>Product</label><select id="lineProd">${products.filter(isTracked).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select>
+    <label>Item / description</label><input id="lineName" list="lineNames" placeholder="e.g. Pepsi crate, chicken, packaging" autocomplete="off"><datalist id="lineNames">${products.filter(p=>p.type!=='overtime'&&p.type!=='accompany').map(p=>`<option value="${esc(p.name)}">`).join('')}</datalist>
     <label>Quantity</label><input id="lineQty" type="number" value="1">
     <label>Rate (₹)</label><input id="lineRate" type="number" value="0">
     <button class="btn primary" style="margin-top:10px" onclick="confirmPurchaseLine()">Add</button>`);
 }
 async function confirmPurchaseLine(){
-  const pid = Number(document.getElementById('lineProd').value);
-  const p = await dbGet('products', pid);
+  const name = document.getElementById('lineName').value.trim();
+  if(!name){ tell('Enter what was purchased.'); return; }
+  const match = (await dbAll('products')).find(x=>x.name.toLowerCase()===name.toLowerCase());
   const qty = Number(document.getElementById('lineQty').value)||1;
   const rate = Number(document.getElementById('lineRate').value)||0;
-  purchaseCart.push({productId:pid, name:p.name, qty, rate});
+  purchaseCart.push({productId:match?match.id:null, name:match?match.name:name, qty, rate});
   closeModal(); render();
 }
 function removePurchaseLine(idx){ purchaseCart.splice(idx,1); render(); }
@@ -2442,8 +2459,7 @@ async function savePurchase(){
   const payMethod = document.getElementById('pPayMethod').value;
   const subtotal = purchaseCart.reduce((s,i)=>s+i.qty*i.rate,0);
   const total = subtotal + subtotal*tax/100;
-  for(const item of purchaseCart){ const p = await dbGet('products', item.productId); p.stock += item.qty; await dbPut('products', p); await dbLogInv(p, item.qty, 'purchase', invoiceNo, Date.now()); }
-  await dbPut('purchases', { vendorId, invoiceNo, date:Date.now(), items:purchaseCart, subtotal, tax, total, paymentStatus });
+  await dbPut('purchases', { vendorId, invoiceNo, date:Date.now(), items:purchaseCart, subtotal, tax, total, paymentStatus, payMethod:paymentStatus==='Paid'?payMethod:'' });
   if(paymentStatus==='Paid') await debitAccount(payMethod, total);
   purchaseCart = [];
   render();
@@ -2504,117 +2520,458 @@ async function screenCashBank(){
   <p class="muted" style="font-size:12px">Balances update automatically from sales, expenses, and paid purchases based on the payment method selected.</p>`;
 }
 
-/* ============ Reports ============ */
+/* ============ Reports — visual analytics ============
+   Everything below is computed from the saved invoices, expenses, purchases and salary payments — nothing is hard-coded.
+   Dates use the café's own time zone (India Standard Time) whatever the phone's setting is.
+   Revenue is shown EXCLUDING tax: Net Sales = line totals − gaming discount − the revenue part of credit notes. Tax collected is
+   reported separately and never counted as revenue or profit. Outstanding invoices are revenue (they were earned) but are NOT
+   counted as payments received. Deleted invoices live in the Deleted archive and are therefore never part of any report. */
+const IST_MS = 330*60000;
+const p2 = n=>String(n).padStart(2,'0');
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function istYmd(ts){ const d=new Date(ts+IST_MS); return d.getUTCFullYear()+'-'+p2(d.getUTCMonth()+1)+'-'+p2(d.getUTCDate()); }
+function istStart(s){ const [y,m,d]=s.split('-').map(Number); return Date.UTC(y,m-1,d)-IST_MS; }
+function istHour(ts){ return new Date(ts+IST_MS).getUTCHours(); }
+function addDaysYmd(s,n){ const [y,m,d]=s.split('-').map(Number); const t=new Date(Date.UTC(y,m-1,d+n)); return t.getUTCFullYear()+'-'+p2(t.getUTCMonth()+1)+'-'+p2(t.getUTCDate()); }
+function mondayOf(s){ const [y,m,d]=s.split('-').map(Number); const dw=new Date(Date.UTC(y,m-1,d)).getUTCDay(); return addDaysYmd(s, -((dw+6)%7)); }
+function lastDayYmd(y,m){ return y+'-'+p2(m)+'-'+p2(new Date(Date.UTC(y,m,0)).getUTCDate()); }
+function nextMonthYmd(s){ const [y,m]=s.split('-').map(Number); return m===12 ? (y+1)+'-01-01' : y+'-'+p2(m+1)+'-01'; }
+function dispDay(s){ const [y,m,d]=s.split('-').map(Number); return d+' '+MON[m-1]+' '+y; }
+function dispTs(ts){ return ts ? dispDay(istYmd(ts)) : ''; }
+function dispTime(ts){ const d=new Date(ts+IST_MS); let h=d.getUTCHours(); const ap=h>=12?'pm':'am'; h=h%12||12; return h+':'+p2(d.getUTCMinutes())+' '+ap; }
+const REP_RANGES = [['today','Today'],['yesterday','Yesterday'],['week','This Week'],['month','This Month'],['lastmonth','Last Month'],['quarter','This Quarter'],['year','This Year'],['custom','Custom Date Range']];
+function repRange(rep){
+  const today = istYmd(Date.now()); const [y,m] = today.split('-').map(Number); let from=today, to=today;
+  switch(rep.range){
+    case 'yesterday': from = to = addDaysYmd(today,-1); break;
+    case 'week': from = mondayOf(today); to = addDaysYmd(from,6); break;
+    case 'month': from = y+'-'+p2(m)+'-01'; to = lastDayYmd(y,m); break;
+    case 'lastmonth': { const pm = m===1?12:m-1, py = m===1?y-1:y; from = py+'-'+p2(pm)+'-01'; to = lastDayYmd(py,pm); } break;
+    case 'quarter': { const qm = Math.floor((m-1)/3)*3+1; from = y+'-'+p2(qm)+'-01'; to = lastDayYmd(y,qm+2); } break;
+    case 'year': from = y+'-01-01'; to = y+'-12-31'; break;
+    case 'custom': from = rep.from || today; to = rep.to || from; if(to<from){ const t=from; from=to; to=t; } break;
+  }
+  return { from, to, start:istStart(from), end:istStart(to)+86400000-1, today };
+}
+const CAT_ORDER = ['gaming','food','beverage','combo','membership','event','merch','other'];
+const CAT_LABEL = { gaming:'Gaming', food:'Food', beverage:'Beverages', combo:'Combos', membership:'Memberships', event:'Events', merch:'Merchandise', other:'Other' };
+const CAT_COLOR = { gaming:'#22c55e', food:'#f59e0b', beverage:'#3b82f6', combo:'#06b6d4', membership:'#a855f7', event:'#ec4899', merch:'#eab308', other:'#94a3b8' };
+const C_EXP = '#ef4444', C_PROFIT = '#14b8a6', C_REV = '#22c55e';
+const REV_PIE = [['gaming','Gaming Sessions','#22c55e'],['fb','Food & Beverages','#f59e0b'],['membership','Memberships','#a855f7'],['event','Events','#ec4899'],['merch','Merchandise','#eab308'],['other','Other Sales','#94a3b8']];
+const EXP_GROUPS = [['Electricity','#facc15'],['Internet','#38bdf8'],['Rent','#f87171'],['Staff Salaries','#c084fc'],['Maintenance','#fb923c'],['Equipment','#2dd4bf'],['Marketing','#f472b6'],['Food & Beverage Purchases','#a3e635'],['Other Expenses','#94a3b8']];
+const PAY_COLOR = { 'Cash':'#65a30d', 'UPI':'#6366f1', 'Card':'#0891b2', 'Bank Transfer':'#d946ef', 'Other':'#94a3b8' };
+const SETUP_COLORS = ['#22c55e','#3b82f6','#f59e0b','#a855f7','#ec4899','#06b6d4','#eab308','#94a3b8'];
+function expGroupOf(c){
+  const k = String(c||'').toLowerCase();
+  if(/electric/.test(k)) return 'Electricity'; if(/internet|wifi|broadband/.test(k)) return 'Internet'; if(/rent/.test(k)) return 'Rent';
+  if(/staff|salary|wage/.test(k)) return 'Staff Salaries'; if(/maint|repair/.test(k)) return 'Maintenance'; if(/equip/.test(k)) return 'Equipment';
+  if(/market|advert/.test(k)) return 'Marketing'; if(/food|suppl|purchase|beverage|grocer/.test(k)) return 'Food & Beverage Purchases';
+  return 'Other Expenses';
+}
+function lineCat(l, pm){
+  if(l.kind==='gaming' || l.kind==='accompany' || l.kind==='overtime') return 'gaming';
+  const p = l.itemId!=null ? pm[l.itemId] : null; const t = p ? p.type : '';
+  if(t==='food' || t==='beverage' || t==='combo' || t==='membership' || t==='event') return t;
+  if(t==='merch') return 'merch';
+  if(l.included && l.included.length) return 'combo';
+  const c = ((l.category||'')+' '+(l.name||'')).toLowerCase();
+  if(/combo/.test(c)) return 'combo'; if(/beverage|drink|sprite|fanta|pepsi|mazza|cola|juice/.test(c)) return 'beverage';
+  if(/member/.test(c)) return 'membership'; if(/event|tournament/.test(c)) return 'event'; if(/merch/.test(c)) return 'merch';
+  return l.bucket==='food' ? 'food' : 'other';
+}
+function repLines(inv, pm){
+  if(inv.lines) return inv.lines.map(l=>({ cat:lineCat(l,pm), kind:l.kind, name:l.name||'', qty:l.qty||1, amount:Number(l.total)||0, setup:l.kind==='gaming'?(l.setupLabel||l.console||l.name||'Other'):'', players:l.players||0, minutes:l.kind==='gaming'?(l.minutes||0):0, start:l.startTime||inv.date }));
+  const out = []; const segs = invoiceSegments(inv); let segSum = 0;   // older invoice shapes
+  segs.forEach(sg=>{ segSum += sg.charge||0; out.push({ cat:'gaming', kind:'gaming', name:sg.console||'', qty:1, amount:sg.charge||0, setup:sg.console||'Other', players:sg.players||0, minutes:sg.durationMins||0, start:inv.date }); });
+  const gm = (inv.gamingAmount||0)+(inv.accompanyAmount||0)+(inv.overtimeAmount||0);
+  if(gm-segSum>0) out.push({ cat:'gaming', kind:segs.length?'accompany':'gaming', name:'Gaming', qty:1, amount:gm-segSum, setup:segs.length?'':'Other', players:0, minutes:0, start:inv.date });
+  (inv.items||[]).forEach(i=>out.push({ cat:lineCat({name:i.name,bucket:'food'},pm), kind:'item', name:i.name, qty:i.qty||1, amount:(i.price||0)*(i.qty||1), setup:'', players:0, minutes:0, start:inv.date }));
+  if(!(inv.items||[]).length && inv.foodAmount) out.push({ cat:'food', kind:'item', name:'Food & beverages', qty:1, amount:inv.foodAmount, setup:'', players:0, minutes:0, start:inv.date });
+  if(inv.otherAmount) out.push({ cat:'other', kind:'item', name:'Other', qty:1, amount:inv.otherAmount, setup:'', players:0, minutes:0, start:inv.date });
+  return out;
+}
+const r2 = n=>Math.round((Number(n)||0)*100)/100;
+function repPayStatus(inv){ const bal = invoiceBalance(inv); return bal<=0 ? 'paid' : (invoicePaid(inv)>0 ? 'partial' : 'unpaid'); }
+const PAY_STATUS_LABEL = { paid:'Paid', partial:'Partly paid', unpaid:'Unpaid' };
+/* One invoice → one record with revenue split by category. F = active filters. Returns null when the invoice does not match. */
+function repInvoice(inv, pm, F){
+  const all = repLines(inv, pm); let L = all;
+  if(F.cat) L = L.filter(x=>x.cat===F.cat);
+  if(F.setup) L = L.filter(x=>x.kind==='gaming' && x.setup===F.setup);
+  if(!L.length && all.length) return null;
+  const st = repPayStatus(inv);
+  if(F.status==='outstanding' ? st==='paid' : (F.status && F.status!=='refunded' && st!==F.status)) return null;
+  const pays = invPayTotals(inv);
+  const refunded = (inv.payments||[]).some(p=>p.amount<0) || (inv.adjustments||[]).length>0;
+  if(F.status==='refunded' && !refunded) return null;
+  if(F.method && (F.method==='none' ? pays.length : !pays.some(p=>p.method===F.method && p.amount>0))) return null;
+  if(F.cust){ const q = F.cust.trim().toLowerCase(); if(q && !((inv.customerName||'').toLowerCase().includes(q) || String(inv.customerMobile||'').includes(q))) return null; }
+  const sub = all.reduce((s,x)=>s+x.amount,0), gross = L.reduce((s,x)=>s+x.amount,0), share = sub>0 ? gross/sub : 1;
+  const allG = all.filter(x=>x.cat==='gaming').reduce((s,x)=>s+x.amount,0), mG = L.filter(x=>x.cat==='gaming').reduce((s,x)=>s+x.amount,0);
+  const discount = (inv.discount||0) * (allG>0 ? mG/allG : 0);
+  const grand = inv.grandTotal||0, credits = invoiceCredits(inv);
+  const credEx = grand>0 ? credits*((sub-(inv.discount||0))/grand) : 0, credTax = credits-credEx;   // a credit note refunds revenue AND its share of tax
+  const cats = {}; CAT_ORDER.forEach(c=>cats[c]=0);
+  L.forEach(x=>{ cats[x.cat]+=x.amount; }); cats.gaming -= discount;
+  const net0 = CAT_ORDER.reduce((s,c)=>s+cats[c],0);
+  if(net0>0) CAT_ORDER.forEach(c=>{ cats[c] -= credEx*share*cats[c]/net0; });
+  CAT_ORDER.forEach(c=>cats[c]=r2(cats[c]));
+  const net = r2(CAT_ORDER.reduce((s,c)=>s+cats[c],0));
+  const tax = r2((inv.tax||0)*share - credTax*share);
+  return { inv, id:inv.id, number:inv.number, date:inv.date, name:inv.customerName||'Walk-in Customer', mobile:inv.customerMobile||'', lines:L,
+    gross:r2(gross), discount:r2(discount), credEx:r2(credEx*share), cats, net, tax, total:r2(net+tax),
+    pays, paid:invoicePaid(inv), balance:Math.max(0,invoiceBalance(inv)), status:st, session:inv.sessionCode||'', sessionId:inv.sessionId };
+}
+/* Every figure on the dashboard comes out of this one function. */
+function repAnalyze(D, R, F){
+  const A = { F, recs:[], cats:{}, gross:0, discount:0, credEx:0, net:0, tax:0, count:0, sessions:0, outstanding:0, received:0, payMethods:{}, setups:{}, players:{}, hours:Array.from({length:24},()=>({rev:0,n:0})),
+    gTime:0, gExtra:0, gMins:0, gSegs:0, items:{ food:{}, beverage:{}, combo:{} }, gran:'day' };
+  CAT_ORDER.forEach(c=>A.cats[c]=0);
+  const sess = new Set();
+  D.invoices.forEach(inv=>{
+    if(inv.date<R.start || inv.date>R.end) return;
+    const r = repInvoice(inv, D.pm, F); if(!r) return;
+    A.recs.push(r); A.count++; A.gross+=r.gross; A.discount+=r.discount; A.credEx+=r.credEx; A.net+=r.net; A.tax+=r.tax; A.outstanding+=r.balance;
+    CAT_ORDER.forEach(c=>A.cats[c]+=r.cats[c]);
+    r.pays.forEach(p=>{ if(F.method && p.method!==F.method) return; A.payMethods[p.method]=(A.payMethods[p.method]||0)+p.amount; A.received+=p.amount; });
+    let hasG = false;
+    r.lines.forEach(l=>{
+      if(l.cat==='gaming'){ hasG = true;
+        if(l.kind==='gaming'){ A.gTime+=l.amount; A.gMins+=l.minutes; A.gSegs++; const s=(A.setups[l.setup]=A.setups[l.setup]||{rev:0,n:0,mins:0}); s.rev+=l.amount; s.n++; s.mins+=l.minutes;
+          const pk = l.players||0, pp=(A.players[pk]=A.players[pk]||{rev:0,n:0}); pp.rev+=l.amount; pp.n++;
+          const h=A.hours[istHour(l.start)]; h.rev+=l.amount; h.n++; }
+        else A.gExtra+=l.amount;
+      } else if(A.items[l.cat]){ const it=(A.items[l.cat][l.name]=A.items[l.cat][l.name]||{qty:0,rev:0}); it.qty+=l.qty; it.rev+=l.amount; }
+    });
+    if(hasG) sess.add(r.sessionId!=null ? 's'+r.sessionId : 'i'+r.id);
+  });
+  A.sessions = sess.size;
+  Object.keys(A).forEach(k=>{ if(typeof A[k]==='number') A[k]=r2(A[k]); }); CAT_ORDER.forEach(c=>A.cats[c]=r2(A.cats[c]));
+  A.fb = r2(A.cats.food+A.cats.beverage+A.cats.combo);
+  return A;
+}
+/* Expenses: recorded expenses + purchases that were paid + salary payments. Unpaid purchases are payables, not yet an expense. */
+function repExpenses(D, R, F){
+  const rows = [];
+  const inR = ts=>ts>=R.start && ts<=R.end;
+  D.expenses.forEach(e=>{ if(e.isTemplate || !inR(e.date)) return; rows.push({ ts:e.date, category:e.category||'Other', group:expGroupOf(e.category), vendor:e.vendor||'', desc:e.desc||'', amount:Number(e.amount)||0, method:e.payMethod||'', receipt:e.receipt||e.ref||'', src:'Expense' }); });
+  D.purchases.forEach(p=>{ if(p.paymentStatus!=='Paid' || !inR(p.date)) return; const v=D.vendors.find(x=>x.id===p.vendorId);
+    rows.push({ ts:p.date, category:'Food & Beverage Purchases', group:'Food & Beverage Purchases', vendor:v?v.name:'', desc:(p.items||[]).map(i=>i.name+' ×'+i.qty).join(', '), amount:Number(p.total)||0, method:p.payMethod||'', receipt:p.invoiceNo||'', src:'Purchase' }); });
+  D.empTx.forEach(t=>{ if(t.type!=='Salary Payment' || !inR(t.date)) return; const e=D.employees.find(x=>x.id===t.employeeId);
+    rows.push({ ts:t.date, category:'Staff Salaries', group:'Staff Salaries', vendor:e?e.name:'', desc:('Salary payment '+(t.notes||'')).trim(), amount:Number(t.amount)||0, method:'Cash', receipt:'', src:'Salary' }); });
+  const out = rows.filter(x=>!F.method || (F.method==='none' ? !x.method : x.method===F.method)).sort((a,b)=>b.ts-a.ts);
+  const total = r2(out.reduce((s,x)=>s+x.amount,0)); const by = {}; EXP_GROUPS.forEach(([g])=>by[g]=0); out.forEach(x=>by[x.group]=r2(by[x.group]+x.amount));
+  const unpaid = r2(D.purchases.filter(p=>p.paymentStatus!=='Paid' && inR(p.date)).reduce((s,p)=>s+(Number(p.total)||0),0));
+  return { rows:out, total, by, unpaid };
+}
+async function repLoad(start){
+  let invoices = await dbAll('invoices'), partial = false;
+  if(start < Date.now()-118*86400000){   // older than the live 120-day window → read the whole history
+    try{ invoices = await withTimeout(dbAllFresh('invoices'), 9000); }catch(e){ partial = true; }
+  }
+  const products = await dbAll('products'); const pm = {}; products.forEach(p=>pm[p.id]=p);
+  return { invoices, pm, partial, expenses:await dbAll('expenses'), purchases:await dbAll('purchases'), vendors:await dbAll('vendors'), employees:await dbAll('employees'), empTx:await dbAll('employeeTx'), customers:await dbAll('customers') };
+}
+/* ---- time buckets ---- */
+function repGran(rep, R){ if(rep.gran && rep.gran!=='auto') return rep.gran; const to = R.to>R.today?R.today:R.to; const days = Math.round((istStart(to)-istStart(R.from))/86400000)+1; return days<=40?'day':days<=190?'week':'month'; }
+function repBuckets(R, gran){
+  const to = R.to>R.today ? R.today : R.to; const out = [];
+  let cur = gran==='week' ? mondayOf(R.from) : gran==='month' ? R.from.slice(0,7)+'-01' : R.from, g = 0;
+  while(cur<=to && g++<800){
+    const label = gran==='month' ? MON[Number(cur.slice(5,7))-1]+" '"+cur.slice(2,4) : Number(cur.slice(8))+' '+MON[Number(cur.slice(5,7))-1];
+    out.push({ key:gran==='month'?cur.slice(0,7):cur, label, title:gran==='day'?dispDay(cur):gran==='week'?'Week of '+dispDay(cur):MON[Number(cur.slice(5,7))-1]+' '+cur.slice(0,4) });
+    cur = gran==='day' ? addDaysYmd(cur,1) : gran==='week' ? addDaysYmd(cur,7) : nextMonthYmd(cur);
+  }
+  if(!out.length) out.push({ key:R.from, label:dispDay(R.from), title:dispDay(R.from) });
+  return out;
+}
+function bucketKeyOf(ts, gran){ const y = istYmd(ts); return gran==='day' ? y : gran==='week' ? mondayOf(y) : y.slice(0,7); }
+function repSeries(B, gran, items, valFn){ const idx = {}; B.forEach((b,i)=>idx[b.key]=i); const v = B.map(()=>0); items.forEach(x=>{ const i = idx[bucketKeyOf(x.ts!==undefined?x.ts:x.date, gran)]; if(i!==undefined) v[i]+=valFn(x); }); return v.map(r2); }
+
+/* ---- SVG charts (no library: works offline, tiny, readable on a small phone) ---- */
+function shortN(n){ const a=Math.abs(n), s=n<0?'-':''; return a>=1e7 ? s+(a/1e7).toFixed(a%1e7?1:0)+'Cr' : a>=1e5 ? s+(a/1e5).toFixed(a%1e5?1:0)+'L' : a>=1e3 ? s+(a/1e3).toFixed(a%1e3?1:0)+'k' : s+Math.round(a); }
+function niceScale(min, max){   // → { lo, hi, step } with ~4 intervals
+  if(max<=0 && min>=0) max = 1; const span = Math.max(max-Math.min(min,0), 1), raw = span/4, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1,2,2.5,5,10].map(m=>m*mag).find(s=>s>=raw) || 10*mag;
+  return { lo:Math.floor(Math.min(min,0)/step)*step, hi:Math.ceil(Math.max(max,0)/step)*step || step, step };
+}
+function tipAttr(t){ return 'data-tip="'+esc(t)+'"'; }
+function pieSvg(items, o){
+  o = o||{}; const live = items.filter(i=>i.value>0), total = items.reduce((s,i)=>s+Math.max(0,i.value),0);
+  if(!(total>0)) return '<div class="muted rp-empty">No data for this selection.</div>';
+  const R=92, r=o.donut?56:0, c=100; let a0=-Math.PI/2; const segs=[]; const f=n=>n.toFixed(2);
+  live.forEach(it=>{
+    const frac = it.value/total, a1 = a0+frac*2*Math.PI, tip = it.label+'|'+fmt(it.value)+'|'+(frac*100).toFixed(1)+'% of total';
+    if(frac>=0.9999) segs.push(`<circle cx="100" cy="100" r="${(R+r)/2}" fill="none" stroke="${it.color}" stroke-width="${R-r}" ${tipAttr(tip)}/>`);
+    else {
+      const x0=c+R*Math.cos(a0), y0=c+R*Math.sin(a0), x1=c+R*Math.cos(a1), y1=c+R*Math.sin(a1), lg=frac>0.5?1:0;
+      const d = r>0 ? `M${f(x0)} ${f(y0)}A${R} ${R} 0 ${lg} 1 ${f(x1)} ${f(y1)}L${f(c+r*Math.cos(a1))} ${f(c+r*Math.sin(a1))}A${r} ${r} 0 ${lg} 0 ${f(c+r*Math.cos(a0))} ${f(c+r*Math.sin(a0))}Z` : `M${c} ${c}L${f(x0)} ${f(y0)}A${R} ${R} 0 ${lg} 1 ${f(x1)} ${f(y1)}Z`;
+      segs.push(`<path d="${d}" fill="${it.color}" stroke="var(--panel)" stroke-width="1.5" tabindex="0" ${tipAttr(tip)}><title>${esc(tip.replace(/\|/g,' · '))}</title></path>`);
+    }
+    a0 = a1;
+  });
+  const mid = o.donut ? `<text x="100" y="97" text-anchor="middle" style="fill:var(--muted);font-size:10px">${esc(o.centerLabel||'Total')}</text><text x="100" y="114" text-anchor="middle" style="fill:var(--text);font-size:14px;font-weight:600">${fmt(total)}</text>` : '';
+  const legend = items.map(it=>`<div class="rp-lg" ${tipAttr(it.label+'|'+fmt(it.value)+'|'+(total>0?(it.value/total*100).toFixed(1):'0.0')+'% of total')}><i style="background:${it.color}"></i><span class="n">${esc(it.label)}</span><span class="v">${fmt(it.value)}</span><span class="p">${total>0?(it.value/total*100).toFixed(1):'0.0'}%</span></div>`).join('');
+  return `<div class="rp-pie"><svg viewBox="0 0 200 200" role="img" aria-label="${esc(o.label||'Chart')}">${segs.join('')}${mid}</svg><div class="rp-legend">${legend}</div></div>`;
+}
+function axisSvg(W, H, m, sc, gridFmt){
+  let s=''; for(let v=sc.lo; v<=sc.hi+sc.step/2; v+=sc.step){ const y = m.t + (H-m.t-m.b)*(1-(v-sc.lo)/(sc.hi-sc.lo)); s += `<line x1="${m.l}" x2="${W-m.r}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:var(--line)" stroke-width="${v===0?1.2:.6}"/><text x="${m.l-5}" y="${(y+3).toFixed(1)}" text-anchor="end" style="fill:var(--muted);font-size:9px">${gridFmt(v)}</text>`; }
+  return s;
+}
+function xLabels(B, W, m, every){ const bw=(W-m.l-m.r)/B.length; return B.map((b,i)=> i%every===0 ? `<text x="${(m.l+bw*(i+.5)).toFixed(1)}" y="${m.b2}" text-anchor="middle" style="fill:var(--muted);font-size:9px">${esc(b.label)}</text>` : '').join(''); }
+function barsSvg(B, series, o){   // grouped vertical bars; series:[{name,color,vals}]
+  o = o||{}; const n=B.length, ns=series.length, H=o.h||210, m={l:42,r:8,t:10,b:30,b2:H-12};
+  const bw = Math.max(ns*9+8, 18), W = Math.max(320, m.l+m.r+n*bw), every = Math.max(1, Math.ceil(n/Math.floor((W-m.l-m.r)/44)));
+  const max = Math.max(0,...series.flatMap(s=>s.vals)), sc = niceScale(0,max), slot=(W-m.l-m.r)/n, gw=Math.min(slot*0.78, ns*22), bwid=gw/ns;
+  const yOf = v=>m.t+(H-m.t-m.b)*(1-(v-sc.lo)/(sc.hi-sc.lo));
+  let bars=''; B.forEach((b,i)=>{ const x0 = m.l+slot*i+(slot-gw)/2;
+    series.forEach((s,k)=>{ const v=s.vals[i]; const h=Math.max(0, yOf(0)-yOf(v));
+      bars += `<rect x="${(x0+k*bwid).toFixed(1)}" y="${(yOf(0)-h).toFixed(1)}" width="${Math.max(1,bwid-1).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${s.color}" ${tipAttr(b.title+'|'+series.map(z=>z.name+': '+fmt(z.vals[i])).join('|'))}/>`; });
+    bars += `<rect x="${(m.l+slot*i).toFixed(1)}" y="${m.t}" width="${slot.toFixed(1)}" height="${H-m.t-m.b}" fill="transparent" ${tipAttr(b.title+'|'+series.map(z=>z.name+': '+fmt(z.vals[i])).join('|'))}/>`; });
+  return `<div class="rp-scroll"><svg viewBox="0 0 ${W} ${H}" style="min-width:${W}px;width:100%;height:auto" role="img" aria-label="${esc(o.label||'Bar chart')}">${axisSvg(W,H,m,sc,shortN)}${bars}${xLabels(B,W,m,every)}</svg></div>${series.length>1?`<div class="rp-key">${series.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('')}</div>`:''}`;
+}
+function lineSvg(B, series, o){   // series:[{name,color,vals}]; handles negatives
+  o = o||{}; const n=B.length, H=o.h||200, m={l:44,r:10,t:10,b:30,b2:H-12}, W=Math.max(320, m.l+m.r+n*26), every=Math.max(1, Math.ceil(n/Math.floor((W-m.l-m.r)/44)));
+  const all = series.flatMap(s=>s.vals), sc = niceScale(Math.min(0,...all), Math.max(0,...all)), slot=(W-m.l-m.r)/n;
+  const X = i=>m.l+slot*(i+.5), Y = v=>m.t+(H-m.t-m.b)*(1-(v-sc.lo)/(sc.hi-sc.lo));
+  let g=''; series.forEach(s=>{
+    g += `<polyline fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" points="${s.vals.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}"/>`;
+    s.vals.forEach((v,i)=>{ const t=B[i].title+'|'+series.map(z=>z.name+': '+fmt(z.vals[i])).join('|'); g += `<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="${n>40?1.6:3}" fill="${s.color}"/><circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="11" fill="transparent" ${tipAttr(t)}/>`; });
+  });
+  return `<div class="rp-scroll"><svg viewBox="0 0 ${W} ${H}" style="min-width:${W}px;width:100%;height:auto" role="img" aria-label="${esc(o.label||'Line chart')}">${axisSvg(W,H,m,sc,shortN)}${g}${xLabels(B,W,m,every)}</svg></div>${series.length>1?`<div class="rp-key">${series.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('')}</div>`:''}`;
+}
+function hbars(rows, o){   // rows:[{label,value,color,sub,tip}]
+  o = o||{}; const max = Math.max(0,...rows.map(r=>r.value));
+  if(!rows.length || !(max>0)) return '<div class="muted rp-empty">No data for this selection.</div>';
+  return rows.map(r=>`<div class="rp-hb" ${tipAttr(r.tip||(r.label+'|'+fmt(r.value)))}><div class="t"><span class="n">${esc(r.label)}</span><span class="v">${o.fmtv?o.fmtv(r.value):fmt(r.value)}${r.sub?` <small>${esc(r.sub)}</small>`:''}</span></div><div class="bar"><i style="width:${Math.max(1.5,r.value/max*100).toFixed(1)}%;background:${r.color||'var(--accent)'}"></i></div></div>`).join('');
+}
+function setupChartTips(){
+  const tip = document.createElement('div'); tip.id='chartTip'; tip.hidden=true; document.body.appendChild(tip);
+  const show = (el, x, y)=>{ const parts = (el.getAttribute('data-tip')||'').split('|'); tip.innerHTML = '<b>'+esc(parts[0])+'</b>'+parts.slice(1).map(p=>'<div>'+esc(p)+'</div>').join(''); tip.hidden=false;
+    const w=tip.offsetWidth, h=tip.offsetHeight; tip.style.left = Math.max(6,Math.min(innerWidth-w-6, x-w/2))+'px'; tip.style.top = Math.max(6, y-h-14)+'px'; };
+  const find = e=>e.target && e.target.closest ? e.target.closest('[data-tip]') : null;
+  document.addEventListener('pointerover', e=>{ if(e.pointerType!=='mouse') return; const el=find(e); if(el) show(el,e.clientX,e.clientY); else tip.hidden=true; });
+  document.addEventListener('pointerdown', e=>{ const el=find(e); if(el) show(el,e.clientX,e.clientY); else tip.hidden=true; });
+  document.addEventListener('focusin', e=>{ const el=find(e); if(el){ const b=el.getBoundingClientRect(); show(el,b.left+b.width/2,b.top); } });
+  window.addEventListener('scroll', ()=>{ tip.hidden=true; }, {passive:true});
+}
+
+/* ---- the screen ---- */
+const REP_TABS = [['overview','Overview'],['pnl','Profit & Loss'],['sales','Sales'],['expenses','Expenses'],['gaming','Gaming'],['customers','Customers']];
+function repFiltersActive(F){ return ['cat','setup','method','status','cust'].filter(k=>F[k]); }
+function repKpi(l, v, sub, color){ return `<div class="rp-kpi" style="border-left-color:${color||'var(--line)'}"><div class="l">${l}</div><div class="v">${v}</div>${sub?`<div class="s">${sub}</div>`:''}</div>`; }
+function repTable(cols, rows, o){
+  o = o||{}; const lim = o.limit||200, shown = rows.slice(0, lim);
+  if(!rows.length) return '<div class="muted rp-empty">Nothing recorded for this selection.</div>';
+  const th = cols.map(c=>`<th class="${c.r?'right':''}">${c.h}</th>`).join('');
+  const body = shown.map(r=>'<tr>'+cols.map(c=>`<td class="${c.r?'right':''}">${c.f(r)}</td>`).join('')+'</tr>').join('');
+  const tot = o.totals ? '<tr class="total-row">'+cols.map((c,i)=>`<td class="${c.r?'right':''}">${o.totals[i]===undefined?'':o.totals[i]}</td>`).join('')+'</tr>' : '';
+  return `<div class="rp-scroll"><table class="rp-table"><thead><tr>${th}</tr></thead><tbody>${body}${tot}</tbody></table></div>${rows.length>lim?`<div class="muted" style="font-size:12px;margin-top:6px">Showing ${lim} of ${rows.length} rows — the CSV export contains all ${rows.length}.</div>`:''}`;
+}
 async function screenReports(){
-  const range = state.reportRange;
-  const invoicesAll = await dbAll('invoices');
-  const expensesAll = (await dbAll('expenses')).filter(e=>!e.isTemplate);
-  const invoices = invoicesAll.filter(i=>inRange(i.date, range, state.reportStart, state.reportEnd));
-  const expenses = expensesAll.filter(e=>inRange(e.date, range, state.reportStart, state.reportEnd));
-  const salesTotal = invoices.reduce((s,i)=>s+i.grandTotal,0);
-  const expTotal = expenses.reduce((s,e)=>s+e.amount,0);
-  const gamingRev = invoices.reduce((s,i)=>s+(i.gamingAmount||0)+(i.accompanyAmount||0)+(i.overtimeAmount||0),0);
-  const foodRev = invoices.reduce((s,i)=>s+i.foodAmount,0);
-  const netProfit = salesTotal - expTotal;
-
-  const expByCat = {}; expenses.forEach(e=>{ expByCat[e.category]=(expByCat[e.category]||0)+e.amount; });
-  const consoleRev = {}; invoices.forEach(i=>{ invoiceSegments(i).forEach(sg=>{ consoleRev[sg.console]=(consoleRev[sg.console]||0)+sg.charge; }); });
-  const playerRev = {}; invoices.forEach(i=>{ invoiceSegments(i).forEach(sg=>{ playerRev[sg.players+'P']=(playerRev[sg.players+'P']||0)+sg.charge; }); });
-  const gamingHours = invoices.reduce((s,i)=>s+invoiceSegments(i).reduce((a,sg)=>a+(sg.durationMins||0),0),0)/60;
-
-  const foodQty = {}; invoices.forEach(i=>invoiceFoodItems(i).forEach(it=>{ foodQty[it.name]=(foodQty[it.name]||0)+it.qty; }));
-  const bestSellers = Object.entries(foodQty).sort((a,b)=>b[1]-a[1]).slice(0,6);
-
-  const products = await dbAll('products');
-  const invValue = products.filter(isTracked).reduce((s,p)=>s+p.stock*p.price,0);
-  const lowStock = products.filter(p=>isTracked(p) && p.stock<=p.min);
-
-  const bar = (obj, total)=>Object.entries(obj).map(([k,v])=>`<div class="bar-row"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${k}</span><span>${fmt(v)}</span></div><div class="bar-track"><div class="bar-fill" style="width:${total?Math.round(v/total*100):0}%"></div></div></div>`).join('');
-
-  const dailyRecords = (await dbAll('dailyRecords')).sort((a,b)=>b.date.localeCompare(a.date));
-  const monthly = aggregateDaily(dailyRecords, r=>monthKey(r.date), 12);
-  const weekly = aggregateDaily(dailyRecords, r=>weekKey(r.date), 12);
-  const periodBars = (periods)=>{
-    if(!periods.length) return '<div class="muted">Not enough history yet — this fills in as you record sales and expenses each day.</div>';
-    const max = Math.max(1, ...periods.map(p=>Math.max(p.sales,p.expenses)));
-    return periods.map(p=>`<div style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;font-size:12px"><b>${p.key}</b><span>Income ${fmt(p.sales)} · Expense ${fmt(p.expenses)}</span></div>
-      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(p.sales/max*100)}%;background:var(--green)"></div></div>
-      <div class="bar-track" style="margin-top:3px"><div class="bar-fill" style="width:${Math.round(p.expenses/max*100)}%;background:var(--red)"></div></div>
-    </div>`).join('');
-  };
-  const revenueBars = (periods)=>{
-    if(!periods.length) return '<div class="muted">No revenue history yet.</div>';
-    const max = Math.max(1, ...periods.map(p=>p.sales));
-    return periods.map(p=>`<div class="bar-row"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${p.key}</span><span>${fmt(p.sales)}</span></div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(p.sales/max*100)}%"></div></div></div>`).join('');
-  };
-
-  return `<h2>Reports</h2>
-  <div style="margin-bottom:10px">
-    ${['today','week','month','custom'].map(r=>`<span class="chip ${range===r?'sel':''}" onclick="setReportRange('${r}')">${r[0].toUpperCase()+r.slice(1)}</span>`).join('')}
-  </div>
-  ${range==='custom'?`<div class="card"><label>Start</label><input type="date" id="rStart" onchange="setCustomRange()"><label>End</label><input type="date" id="rEnd" onchange="setCustomRange()"></div>`:''}
-
-  <div class="section-title">Sales Report</div>
-  <div class="grid2">
-    <div class="stat"><div class="v">${fmt(salesTotal)}</div><div class="l">Total Sales</div></div>
-    <div class="stat"><div class="v">${invoices.length}</div><div class="l">Invoices</div></div>
-  </div>
-
-  <div class="section-title">Profit & Loss</div>
-  <div class="card"><table>
-    <tr><td>Revenue</td><td class="right">${fmt(salesTotal)}</td></tr>
-    <tr><td>Expenses</td><td class="right">-${fmt(expTotal)}</td></tr>
-    <tr class="total-row"><td>Net Profit</td><td class="right">${fmt(netProfit)}</td></tr>
-  </table></div>
-
-  <div class="section-title">Monthly Income vs Expense</div>
-  <div class="card">${periodBars(monthly)}</div>
-
-  <div class="section-title">Weekly Revenue</div>
-  <div class="card">${revenueBars(weekly)}</div>
-
-  <div class="section-title">Monthly Revenue</div>
-  <div class="card">${revenueBars(monthly)}</div>
-
-  <div class="section-title">Expense Report</div>
-  <div class="card">${Object.keys(expByCat).length?bar(expByCat, expTotal):'<div class="muted">No expenses in this range.</div>'}</div>
-
-  <div class="section-title">Gaming Report</div>
-  <div class="card">
-    <div class="grid2" style="margin-bottom:10px">
-      <div class="stat"><div class="v">${invoices.length}</div><div class="l">Sessions Billed</div></div>
-      <div class="stat"><div class="v">${gamingHours.toFixed(1)}h</div><div class="l">Gaming Hours</div></div>
-      <div class="stat"><div class="v">${fmt(gamingRev)}</div><div class="l">Gaming Revenue</div></div>
-      <div class="stat"><div class="v">${fmt(foodRev)}</div><div class="l">Food Revenue</div></div>
+  const rep = state.rep, R = repRange(rep), F = rep.f||{};
+  const D = await repLoad(R.start);
+  const act = repFiltersActive(F), A = repAnalyze(D, R, F), P = act.length ? repAnalyze(D, R, {}) : A;
+  const EX = repExpenses(D, R, F), EXP = act.length ? repExpenses(D, R, {}) : EX;
+  const gran = repGran(rep, R), B = repBuckets(R, gran);
+  const net = r2(P.net - EXP.total), margin = P.net>0 ? net/P.net*100 : 0;
+  const setups = Object.keys(D.invoices.reduce((m,i)=>{ repLines(i,D.pm).forEach(l=>{ if(l.kind==='gaming') m[l.setup]=1; }); return m; },{})).sort();
+  window.__rep = { A, P, EX, EXP, R, D, gran, B, net };   // read by export, print and tests
+  const hasNet = !act.length;
+  const kpis = [
+    repKpi('Total Revenue', fmt(A.net), 'excl. tax · net of discounts', C_REV),
+    repKpi('Total Expenses', fmt(EX.total), act.length&&!F.method?'not filtered by sales filters':'', C_EXP),
+    repKpi('Net Profit', hasNet?fmt(net):'—', hasNet?margin.toFixed(1)+'% margin':'clear filters to see profit', C_PROFIT),
+    repKpi('Gaming Revenue', fmt(A.cats.gaming), '', CAT_COLOR.gaming),
+    repKpi('Food & Beverage', fmt(A.fb), '', CAT_COLOR.food),
+    repKpi('Membership Revenue', fmt(A.cats.membership), '', CAT_COLOR.membership),
+    repKpi('Events Revenue', fmt(A.cats.event), '', CAT_COLOR.event),
+    repKpi('Merchandise Revenue', fmt(A.cats.merch), '', CAT_COLOR.merch),
+    repKpi('Other Revenue', fmt(A.cats.other), '', CAT_COLOR.other),
+    repKpi('Total Sales (invoices)', A.count, '', 'var(--accent)'),
+    repKpi('Gaming Sessions', A.sessions, A.gSegs+' gaming segments', CAT_COLOR.gaming),
+    repKpi('Average Invoice', fmt(A.count?A.net/A.count:0), 'excl. tax', 'var(--accent)'),
+    repKpi('Outstanding Payments', fmt(A.outstanding), 'unpaid on these invoices', '#f59e0b'),
+    repKpi('Payments Received', fmt(A.received), 'net of refunds', '#10b981')
+  ].join('');
+  const sel = (id,label,opts,val,fn)=>`<div><label>${label}</label><select onchange="${fn}(this.value)">${opts.map(([v,t])=>`<option value="${esc(v)}" ${String(val||'')===String(v)?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
+  const filters = `<details class="card rp-noprint" ${act.length?'open':''}><summary style="cursor:pointer;font-weight:600">Filters ${act.length?`<span class="pill amber">${act.length} active</span>`:''}</summary>
+    <div class="grid2" style="margin-top:8px">
+      ${sel('fcat','Category',[['','All'],...CAT_ORDER.map(c=>[c,CAT_LABEL[c]])],F.cat,'repFilter.bind(null,\'cat\')')}
+      ${sel('fset','Gaming setup',[['','All'],...setups.map(s=>[s,s])],F.setup,'repFilter.bind(null,\'setup\')')}
+      ${sel('fmet','Payment method',[['','All'],...PAY_METHODS.map(m=>[m,m]),['none','Unpaid']],F.method,'repFilter.bind(null,\'method\')')}
+      ${sel('fsta','Invoice status',[['','All'],['paid','Paid'],['partial','Partly paid'],['unpaid','Unpaid'],['outstanding','Outstanding (partly + unpaid)'],['refunded','Has credit note / refund']],F.status,'repFilter.bind(null,\'status\')')}
     </div>
-    <div class="muted" style="font-size:12px;margin-bottom:4px">Revenue by Console</div>${bar(consoleRev, gamingRev)}
-    <div class="muted" style="font-size:12px;margin:10px 0 4px">Revenue by Player Count</div>${bar(playerRev, gamingRev)}
+    <label>Customer (name or mobile)</label><input id="rpCust" list="rpCustList" value="${esc(F.cust||'')}" placeholder="All customers" onchange="repFilter('cust',this.value)"><datalist id="rpCustList">${D.customers.map(c=>`<option value="${esc(c.name)}">`).join('')}</datalist>
+    <div class="muted" style="font-size:11px;margin:8px 0">Filters narrow the sales figures, charts and tables. Expenses follow the date range and payment method. Profit &amp; Loss and the trend charts always show the whole business for the dates.</div>
+    ${act.length?'<button class="btn sm" onclick="repClearFilters()">Clear filters</button>':''}</details>`;
+  const chips = REP_RANGES.map(([k,t])=>`<span class="chip ${rep.range===k?'sel':''}" onclick="repSetRange('${k}')">${t}</span>`).join('');
+  const custom = rep.range==='custom' ? `<div class="grid2 rp-noprint"><div><label>From</label><input type="date" id="rStart" value="${R.from}" onchange="repCustom()"></div><div><label>To</label><input type="date" id="rEnd" value="${R.to}" onchange="repCustom()"></div></div>` : '';
+  const tabs = REP_TABS.map(([k,t])=>`<span class="chip ${rep.tab===k?'sel':''}" onclick="repSetTab('${k}')">${t}</span>`).join('');
+  const printHead = `<div class="rp-print-only"><h2>LVL Gaming Café — ${esc((REP_TABS.find(t=>t[0]===rep.tab)||[])[1]||'Report')}</h2><div>${dispDay(R.from)} – ${dispDay(R.to)} · generated ${dispTs(Date.now())} ${dispTime(Date.now())} IST${act.length?' · filters: '+act.map(k=>k+' = '+F[k]).join(', '):''}</div></div>`;
+  let body = '';
+  if(rep.tab==='overview') body = repOverview(A, P, EX, EXP, D, R, gran, B, act);
+  else if(rep.tab==='pnl') body = repPnl(P, EXP, R, net, margin, act);
+  else if(rep.tab==='sales') body = repSales(A, act);
+  else if(rep.tab==='expenses') body = repExpTab(EX);
+  else if(rep.tab==='gaming') body = repGamingTab(A);
+  else body = repCustomers(A, D);
+  const granChips = ['auto','day','week','month'].map(g=>`<span class="chip ${(rep.gran||'auto')===g?'sel':''}" onclick="repSetGran('${g}')">${{auto:'Auto',day:'Daily',week:'Weekly',month:'Monthly'}[g]}</span>`).join('');
+  return `<h2>Reports</h2>
+  <div class="rp rp-noprint-top">
+  <div class="rp-noprint"><div class="chips">${chips}</div>${custom}</div>
+  <div class="muted" style="font-size:12px;margin:2px 0 8px"><b id="rpRange">${R.from===R.to?dispDay(R.from):dispDay(R.from)+' – '+dispDay(R.to)}</b> · India time${D.partial?' · <span style="color:var(--amber)">offline: showing the last 120 days saved on this phone</span>':''}</div>
+  ${filters}
+  <div class="chips rp-noprint" style="margin:8px 0">${tabs}</div>
+  <div class="row rp-noprint" style="gap:8px;margin-bottom:10px"><button class="btn sm" onclick="repExportCsv()">Export CSV</button><button class="btn sm" onclick="repPrint()">Print / Save as PDF</button>${rep.tab==='overview'?'':''}</div>
+  ${printHead}
+  ${rep.tab==='overview'?`<div class="rp-kpis">${kpis}</div>`:''}
+  ${rep.tab==='overview'?`<div class="rp-noprint rp-gran muted">Trend charts: ${granChips}</div>`:''}
+  ${body}
+  </div>`;
+}
+function repCard(title, inner, note){ return `<div class="card rp-card"><div class="rp-h">${title}</div>${inner}${note?`<div class="muted" style="font-size:11px;margin-top:8px">${note}</div>`:''}</div>`; }
+function repOverview(A, P, EX, EXP, D, R, gran, B, act){
+  const GN = {day:'Daily',week:'Weekly',month:'Monthly'}[gran];
+  const revPie = REV_PIE.map(([k,l,c])=>({ label:l, color:c, value: k==='fb' ? A.fb : A.cats[k] }));
+  const expPie = EXP_GROUPS.map(([g,c])=>({ label:g, color:c, value:EX.by[g] }));
+  const payOrder = [...PAY_METHODS, ...Object.keys(A.payMethods).filter(m=>!PAY_METHODS.includes(m))];
+  const payPie = payOrder.map(m=>({ label:m, color:PAY_COLOR[m]||'#94a3b8', value:Math.max(0,A.payMethods[m]||0) }));
+  const names = Object.keys(A.setups).sort((a,b)=>A.setups[b].rev-A.setups[a].rev);
+  const top = names.slice(0,7), rest = names.slice(7);
+  const setupPie = top.map((n,i)=>({ label:n, color:SETUP_COLORS[i], value:A.setups[n].rev }));
+  if(rest.length) setupPie.push({ label:'Other Gaming Setups', color:SETUP_COLORS[7], value:rest.reduce((s,n)=>s+A.setups[n].rev,0) });
+  const revS = repSeries(B, gran, P.recs, r=>r.net), expAll = [...EXP.rows], expS = repSeries(B, gran, expAll, x=>x.amount);
+  const profS = revS.map((v,i)=>r2(v-expS[i]));
+  const gamS = repSeries(B, gran, A.recs, r=>r.cats.gaming);
+  let cum = 0; const gamCum = gamS.map(v=>r2(cum+=v));
+  const lineS = c=>repSeries(B, gran, A.recs, r=>r.cats[c]);
+  const catBars = hbars(CAT_ORDER.filter(c=>c!=='other'||A.cats.other>0).map(c=>({ label:CAT_LABEL[c], value:A.cats[c], color:CAT_COLOR[c] })));
+  const topItems = c=>Object.entries(A.items[c]).sort((a,b)=>b[1].qty-a[1].qty||b[1].rev-a[1].rev).slice(0,8).map(([n,v])=>({ label:n, value:v.qty, color:CAT_COLOR[c], sub:fmt(v.rev), tip:n+'|'+v.qty+' sold|'+fmt(v.rev)+' revenue' }));
+  const hrs = A.hours.map((h,i)=>({ label:(i%12||12)+(i<12?'a':'p'), title:(i%12||12)+(i<12?' am':' pm')+' – start of gaming segments', i }));
+  const peak = A.hours.reduce((b,h,i)=>h.n>A.hours[b].n?i:b,0);
+  const players = Object.keys(A.players).sort((a,b)=>a-b).map(k=>({ label:(k==0?'Unknown':k+(k==1?' player':' players')), value:A.players[k].rev, color:SETUP_COLORS[(Number(k)||0)%7], sub:A.players[k].n+' seg.', tip:(k+' player(s)')+'|'+fmt(A.players[k].rev)+'|'+A.players[k].n+' segments' }));
+  const used = names.slice(0,8).map((n,i)=>({ label:n, value:A.setups[n].n, color:SETUP_COLORS[i%8], sub:fmtDur(A.setups[n].mins), fmtv:null, tip:n+'|'+A.setups[n].n+' segments|'+fmtDur(A.setups[n].mins)+' played' }));
+  const note = act.length ? 'Trend charts show the whole business for the dates (filters apply to the other charts).' : '';
+  const bestCombos = topItems('combo');
+  const prod = [...Object.entries(A.items.food).map(([n,v])=>['Food',n,v]),...Object.entries(A.items.beverage).map(([n,v])=>['Beverage',n,v]),...Object.entries(A.items.combo).map(([n,v])=>['Combo',n,v])].sort((a,b)=>b[2].rev-a[2].rev);
+  return `
+  <div class="rp-grid">
+  ${repCard('Revenue breakdown', pieSvg(revPie,{label:'Revenue breakdown'}), 'Net of discounts and credit notes, excluding tax.')}
+  ${repCard('Expense breakdown', pieSvg(expPie,{label:'Expense breakdown'}), 'Recorded expenses, paid purchases and salary payments.')}
+  ${repCard('Payment methods', pieSvg(payPie,{donut:true,centerLabel:'Received',label:'Payment methods'}), 'Money received against these invoices, net of refunds.')}
+  ${repCard('Gaming setup revenue', pieSvg(setupPie,{label:'Gaming setup revenue'}), 'Time charges per setup as recorded on invoices (before the invoice discount; accompanying persons and overtime are not included).')}
   </div>
-
-  <div class="section-title">Food Report — Best Sellers</div>
-  <div class="card">${bestSellers.length? bestSellers.map(([n,q])=>`<div class="list-item"><span>${n}</span><span>${q} sold</span></div>`).join('') : '<div class="muted">No food sales in this range.</div>'}</div>
-
-  <div class="section-title">Inventory Report</div>
-  <div class="card"><div class="list-item"><span>Inventory Value</span><span>${fmt(invValue)}</span></div>
-  <div class="list-item"><span>Low Stock Items</span><span>${lowStock.length}</span></div></div>
-
-  <div class="section-title">Daily Backup Log</div>
-  <div class="card">${dailyRecords.length ? dailyRecords.slice(0,60).map(r=>`
-    <div class="list-item"><div><b>${r.date}</b><br><span class="muted">${r.invoiceCount} invoice(s) · ${r.expenseCount||0} expense(s)</span></div>
-    <div class="right">${fmt(r.sales)} / -${fmt(r.expenses)}<br><button class="btn sm" style="margin-top:4px" onclick="exportDayDetail('${r.date}')">Export Day</button></div></div>
-  `).join('') : '<div class="muted">No daily records yet — these build up automatically as you take payments.</div>'}</div>
-
-  <button class="btn primary" style="margin:12px 0" onclick="exportAllCSV()">Export All Data (CSV)</button>
-  `;
+  ${repCard('Revenue vs expenses — '+GN.toLowerCase(), barsSvg(B,[{name:'Revenue',color:C_REV,vals:revS},{name:'Expenses',color:C_EXP,vals:expS}],{label:'Revenue vs expenses'}), note)}
+  ${repCard('Net profit trend', lineSvg(B,[{name:'Net profit',color:C_PROFIT,vals:profS}],{label:'Net profit'}), note)}
+  ${repCard('Sales by category', catBars)}
+  ${repCard('Gaming sessions', `<div class="rp-kpis small">${repKpi('Gaming sessions',A.sessions,'',CAT_COLOR.gaming)}${repKpi('Segments',A.gSegs,'',CAT_COLOR.gaming)}${repKpi('Average duration',A.gSegs?fmtDur(A.gMins/A.gSegs):'—','per segment',CAT_COLOR.gaming)}${repKpi('Peak hour',A.hours[peak].n?((peak%12||12)+(peak<12?' am':' pm')):'—','most segments started',CAT_COLOR.gaming)}</div>
+    <div class="rp-sub">Revenue per gaming setup</div>${hbars(names.map((n,i)=>({label:n,value:A.setups[n].rev,color:SETUP_COLORS[i%8],sub:A.setups[n].n+' seg.'})))}
+    <div class="rp-sub">Revenue per player-count variant</div>${hbars(players)}
+    <div class="rp-sub">Most-used setups (segments played)</div>${hbars(used,{fmtv:v=>v})}
+    <div class="rp-sub">Peak business hours (gaming revenue by start hour)</div>${A.gSegs?barsSvg(hrs,[{name:'Gaming revenue',color:CAT_COLOR.gaming,vals:A.hours.map(h=>r2(h.rev))}],{h:170,label:'Gaming revenue by hour'}):'<div class="muted rp-empty">No gaming in this selection.</div>'}
+    <div class="rp-sub">${GN} gaming revenue</div>${barsSvg(B,[{name:'Gaming',color:CAT_COLOR.gaming,vals:gamS}],{h:170,label:'Gaming revenue'})}
+    <div class="rp-sub">Gaming revenue trend (running total)</div>${lineSvg(B,[{name:'Running total',color:CAT_COLOR.gaming,vals:gamCum}],{h:170,label:'Gaming revenue trend'})}`)}
+  ${repCard('Food &amp; beverage', `<div class="rp-sub">Most sold food items</div>${hbars(topItems('food'),{fmtv:v=>v+' sold'})}
+    <div class="rp-sub">Most sold beverages</div>${hbars(topItems('beverage'),{fmtv:v=>v+' sold'})}
+    <div class="rp-sub">Best-selling combos</div>${hbars(bestCombos,{fmtv:v=>v+' sold'})}
+    <div class="rp-sub">Revenue per product</div>${repTable([{h:'Product',f:r=>esc(r[1])},{h:'Type',f:r=>r[0]},{h:'Qty',r:1,f:r=>r[2].qty},{h:'Revenue',r:1,f:r=>fmt(r[2].rev)}], prod, {limit:15})}
+    <div class="rp-sub">Food, beverage &amp; combo revenue trend</div>${lineSvg(B,[{name:'Food',color:CAT_COLOR.food,vals:lineS('food')},{name:'Beverages',color:CAT_COLOR.beverage,vals:lineS('beverage')},{name:'Combos',color:CAT_COLOR.combo,vals:lineS('combo')}],{h:170,label:'Food and beverage trend'})}`, 'Product revenue is the line total on the bill; credit notes are not split across products.')}`;
 }
-function setReportRange(r){ state.reportRange=r; render(); }
-function setCustomRange(){
-  const s = document.getElementById('rStart')?.value, e = document.getElementById('rEnd')?.value;
-  if(s) state.reportStart = new Date(s).getTime();
-  if(e) state.reportEnd = new Date(e).setHours(23,59,59,999);
-  render();
+function repPnl(P, EXP, R, net, margin, act){
+  const row = (l,v,o)=>`<tr class="${o&&o.t?'total-row':''}"><td style="${o&&o.i?'padding-left:20px':''}">${l}</td><td class="right" style="${o&&o.c?'color:'+o.c:''}">${v}</td></tr>`;
+  return repCard('Profit &amp; Loss — '+dispDay(R.from)+(R.from===R.to?'':' – '+dispDay(R.to)), `<table class="rp-table">
+    ${row('Gross revenue (before discounts, excl. tax)', fmt(P.gross))}
+    ${row('Discounts given', '−'+fmt(P.discount), {i:1})}
+    ${row('Credit notes (revenue part)', '−'+fmt(P.credEx), {i:1})}
+    ${row('<b>Net sales</b>', '<b>'+fmt(P.net)+'</b>', {t:1})}
+    ${row('Expenses', '', {})}
+    ${EXP_GROUPS.map(([g])=>EXP.by[g]?row(g,'−'+fmt(EXP.by[g]),{i:1}):'').join('')}
+    ${row('<b>Total expenses</b>', '<b>−'+fmt(EXP.total)+'</b>', {t:1})}
+    ${row('<b>Net profit</b>', '<b>'+fmt(net)+'</b>', {t:1, c:net<0?'var(--red)':'var(--green)'})}
+    ${row('Profit margin', P.net>0 ? margin.toFixed(1)+'%' : '—')}
+  </table>
+  <div class="rp-sub">Not part of revenue or profit</div><table class="rp-table">
+    ${row('Taxes collected (net of credit notes)', fmt(P.tax))}
+    ${row('Invoices not yet paid (still counted as sales)', fmt(P.outstanding))}
+    ${row('Purchases not yet paid (a payable, not yet an expense)', fmt(EXP.unpaid))}</table>`,
+    (act.length?'This statement ignores the sales filters. ':'')+'Net sales = line totals − gaming discount − credit notes, excluding tax. Expenses are cash-basis: recorded expenses, paid purchases and salary payments (advances are not expenses).');
 }
+function repSalesRows(A){
+  return A.recs.slice().sort((a,b)=>b.date-a.date).map(r=>({ inv:r.number, date:r.date, cust:r.name, mobile:r.mobile, gaming:r.cats.gaming, food:r2(r.cats.food+r.cats.beverage+r.cats.combo), other:r2(r.cats.membership+r.cats.event+r.cats.merch+r.cats.other), discount:r.discount, tax:r.tax, total:r.total, credit:r.credEx, method:r.pays.map(p=>p.method).join(' + ')||'Unpaid', status:PAY_STATUS_LABEL[r.status], id:r.id }));
+}
+function repSales(A, act){
+  const rows = repSalesRows(A), S = k=>r2(rows.reduce((s,r)=>s+r[k],0));
+  return repCard('Sales report ('+rows.length+' invoices)', repTable([
+    {h:'Invoice',f:r=>`<a href="#" onclick="openInvoice(${r.id});return false" style="color:var(--accent)">${esc(r.inv)}</a>`},{h:'Date',f:r=>dispTs(r.date)},{h:'Customer',f:r=>esc(r.cust)},
+    {h:'Gaming',r:1,f:r=>fmt(r.gaming)},{h:'Food',r:1,f:r=>fmt(r.food)},{h:'Other',r:1,f:r=>fmt(r.other)},{h:'Tax',r:1,f:r=>fmt(r.tax)},{h:'Total',r:1,f:r=>'<b>'+fmt(r.total)+'</b>'},{h:'Payment',f:r=>esc(r.method)},{h:'Status',f:r=>r.status}],
+    rows, {totals:['<b>Total</b>','','',fmt(S('gaming')),fmt(S('food')),fmt(S('other')),fmt(S('tax')),'<b>'+fmt(S('total'))+'</b>','','']}),
+    'Gaming, Food and Other are net of discount and credit notes, excluding tax. Total = Gaming + Food + Other + Tax. Food includes beverages and combos; Other includes memberships, events and merchandise.');
+}
+function repExpRows(EX){ return EX.rows; }
+function repExpTab(EX){
+  return repCard('Expense report ('+EX.rows.length+')', repTable([{h:'Date',f:r=>dispTs(r.ts)},{h:'Category',f:r=>esc(r.category)},{h:'Vendor',f:r=>esc(r.vendor||'—')},{h:'Description',f:r=>esc(r.desc||'—')},{h:'Amount',r:1,f:r=>fmt(r.amount)},{h:'Method',f:r=>esc(r.method||'—')},{h:'Receipt ref.',f:r=>esc(r.receipt||'—')}],
+    EX.rows, {totals:['<b>Total</b>','','','',  '<b>'+fmt(EX.total)+'</b>','','']}), EX.unpaid?'Not included: '+fmt(EX.unpaid)+' of purchases still unpaid.':'');
+}
+function repGamingRows(A){
+  const rows = []; A.recs.forEach(r=>r.lines.forEach(l=>{ if(l.kind==='gaming') rows.push({ session:r.session||('#'+(r.sessionId||'')), setup:l.setup, players:l.players, mins:l.minutes, rev:l.amount, ts:l.start, inv:r.number }); }));
+  return rows.sort((a,b)=>b.ts-a.ts);
+}
+function repGamingTab(A){
+  const rows = repGamingRows(A);
+  const recon = `<table class="rp-table"><tr><td>Segment time charges</td><td class="right">${fmt(A.gTime)}</td></tr><tr><td>+ Accompanying persons &amp; overtime</td><td class="right">${fmt(A.gExtra)}</td></tr><tr><td>− Discounts &amp; credit notes</td><td class="right">${fmt(A.gTime+A.gExtra-A.cats.gaming)}</td></tr><tr class="total-row"><td><b>Gaming revenue (net)</b></td><td class="right"><b>${fmt(A.cats.gaming)}</b></td></tr></table>`;
+  return repCard('Gaming report ('+rows.length+' segments)', repTable([{h:'Session',f:r=>esc(r.session)},{h:'Setup',f:r=>esc(r.setup)},{h:'Players',r:1,f:r=>r.players||'—'},{h:'Duration',r:1,f:r=>fmtDur(r.mins)},{h:'Revenue',r:1,f:r=>fmt(r.rev)},{h:'Date',f:r=>dispTs(r.ts)},{h:'Invoice',f:r=>esc(r.inv)}], rows,
+    {totals:['<b>Total</b>','','',fmtDur(rows.reduce((s,r)=>s+r.mins,0)),'<b>'+fmt(r2(rows.reduce((s,r)=>s+r.rev,0)))+'</b>','','']}), 'Revenue per segment is the time charge before the invoice discount.')
+    + repCard('How gaming revenue is made up', recon, 'Discounts and credit notes are deducted from gaming revenue.');
+}
+function repCustRows(A, D){
+  const key = x=>x.mobile || ('name:'+(x.name||'').toLowerCase()); const allN = {}; D.invoices.forEach(i=>{ const k=i.customerMobile || ('name:'+(i.customerName||'').toLowerCase()); allN[k]=(allN[k]||0)+1; });
+  const m = {}; A.recs.forEach(r=>{ const k=key(r), c=(m[k]=m[k]||{ name:r.name, mobile:r.mobile, visits:0, spend:0, last:0, repeat:allN[k]>=2 }); c.visits++; c.spend+=r.total; c.last=Math.max(c.last,r.date); });
+  return Object.values(m).map(c=>Object.assign(c,{ spend:r2(c.spend), avg:r2(c.spend/c.visits) })).sort((a,b)=>b.spend-a.spend);
+}
+function repCustomers(A, D){
+  const rows = repCustRows(A, D), rep = rows.filter(r=>r.repeat).length;
+  return repCard('Customer report ('+rows.length+' customers · '+rep+' repeat)', repTable([{h:'Customer',f:r=>esc(r.name)},{h:'Mobile',f:r=>esc(r.mobile||'—')},{h:'Visits',r:1,f:r=>r.visits},{h:'Spending',r:1,f:r=>fmt(r.spend)},{h:'Avg / visit',r:1,f:r=>fmt(r.avg)},{h:'Last visit',f:r=>dispTs(r.last)},{h:'Repeat',f:r=>r.repeat?'Yes':'No'}], rows,
+    {totals:['<b>Total</b>','',rows.reduce((s,r)=>s+r.visits,0),'<b>'+fmt(r2(rows.reduce((s,r)=>s+r.spend,0)))+'</b>','','','']}),
+    'Spending is the billed amount including tax, net of credit notes. Repeat = two or more invoices on record.');
+}
+/* ---- controls ---- */
+function repSetRange(k){ state.rep.range = k; if(k==='custom' && !state.rep.from){ const t=istYmd(Date.now()); state.rep.from = t.slice(0,8)+'01'; state.rep.to = t; } render(); }
+function repCustom(){ const s=document.getElementById('rStart'), e=document.getElementById('rEnd'); if(s&&s.value) state.rep.from=s.value; if(e&&e.value) state.rep.to=e.value; render(); }
+function repSetTab(k){ state.rep.tab=k; state.pendingScroll=0; render(); }
+function repSetGran(g){ state.rep.gran=g; state.pendingScroll=Math.round(window.scrollY||0); render(); }
+function repFilter(k,v){ state.rep.f = Object.assign({}, state.rep.f, { [k]: v||'' }); state.pendingScroll=Math.round(window.scrollY||0); render(); }
+function repClearFilters(){ state.rep.f = {}; render(); }
+function csvNum(n){ return r2(n); }
+function repCsvData(){
+  const X = window.__rep; if(!X) return null; const { A, P, EX, EXP, R, D, net } = X, tab = state.rep.tab;
+  const stamp = R.from+'_to_'+R.to;
+  if(tab==='sales') return { name:`LVL-sales-${stamp}.csv`, rows:repSalesRows(A).map(r=>({ 'Invoice number':r.inv, 'Date':istYmd(r.date), 'Customer':r.cust, 'Mobile':r.mobile, 'Gaming charges':csvNum(r.gaming), 'Food charges':csvNum(r.food), 'Other charges':csvNum(r.other), 'Discount applied (already deducted)':csvNum(r.discount), 'Tax':csvNum(r.tax), 'Total':csvNum(r.total), 'Credit notes (revenue part)':csvNum(r.credit), 'Payment method':r.method, 'Payment status':r.status })) };
+  if(tab==='expenses') return { name:`LVL-expenses-${stamp}.csv`, rows:EX.rows.map(r=>({ 'Expense date':istYmd(r.ts), 'Category':r.category, 'Report group':r.group, 'Vendor':r.vendor, 'Description':r.desc, 'Amount':csvNum(r.amount), 'Payment method':r.method, 'Receipt reference':r.receipt, 'Source':r.src })) };
+  if(tab==='gaming') return { name:`LVL-gaming-${stamp}.csv`, rows:repGamingRows(A).map(r=>({ 'Gaming session ID':r.session, 'Gaming setup':r.setup, 'Player count':r.players, 'Duration (minutes)':r.mins, 'Revenue':csvNum(r.rev), 'Session date':istYmd(r.ts), 'Related invoice':r.inv })) };
+  if(tab==='customers') return { name:`LVL-customers-${stamp}.csv`, rows:repCustRows(A,D).map(r=>({ 'Customer name':r.name, 'Mobile number':r.mobile, 'Visits':r.visits, 'Total spending':csvNum(r.spend), 'Average spending per visit':csvNum(r.avg), 'Last visit':istYmd(r.last), 'Repeat customer':r.repeat?'Yes':'No' })) };
+  const rows = [];   // overview and P&L: the numbers behind the charts, one labelled row each
+  const add = (section, item, value, extra)=>rows.push({ Section:section, Item:item, Amount:csvNum(value), Share:extra||'' });
+  add('Summary','Total revenue (net, excl. tax)',A.net); add('Summary','Total expenses',EX.total);
+  if(!repFiltersActive(state.rep.f||{}).length){ add('Summary','Net profit',net); }
+  add('Summary','Taxes collected (not revenue)',A.tax); add('Summary','Invoices',A.count); add('Summary','Gaming sessions',A.sessions); add('Summary','Average invoice value',A.count?A.net/A.count:0);
+  add('Summary','Outstanding payments',A.outstanding); add('Summary','Payments received',A.received);
+  add('Summary','Gross revenue',A.gross); add('Summary','Discounts',A.discount); add('Summary','Credit notes (revenue part)',A.credEx);
+  REV_PIE.forEach(([k,l])=>{ const v = k==='fb'?A.fb:A.cats[k]; add('Revenue by category',l,v,A.net>0?(v/A.net*100).toFixed(1)+'%':''); });
+  CAT_ORDER.forEach(c=>add('Sales category',CAT_LABEL[c],A.cats[c]));
+  EXP_GROUPS.forEach(([g])=>add('Expenses by category',g,EX.by[g],EX.total>0?(EX.by[g]/EX.total*100).toFixed(1)+'%':''));
+  Object.keys(A.payMethods).forEach(m=>add('Payments by method',m,A.payMethods[m],A.received>0?(A.payMethods[m]/A.received*100).toFixed(1)+'%':''));
+  Object.keys(A.setups).forEach(n=>add('Gaming revenue by setup',n,A.setups[n].rev));
+  return { name:`LVL-report-summary-${stamp}.csv`, rows };
+}
+function repExportCsv(){
+  const d = repCsvData(); if(!d) return;
+  if(!d.rows.length){ showToast('Nothing to export for this selection'); return; }
+  const text = '﻿'+toCSV(d.rows); window.__lastCsv = { name:d.name, text };
+  try{ const blob = new Blob([text], {type:'text/csv;charset=utf-8'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=d.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000); showToast('Exported '+d.rows.length+' rows'); }
+  catch(e){ tell('Could not create the file: '+(e&&e.message||e)); }
+}
+function repPrint(){ try{ window.print(); }catch(e){ tell('Printing is not available here. Use Export CSV instead.'); } }
 
 /* ============ More menu ============ */
 function screenMore(){
@@ -2665,19 +3022,17 @@ async function screenSetItems(){
   let last=null;
   return setBack('Items Catalogue') + `<button class="btn primary" style="margin-bottom:10px" onclick="itemEditModal(null,null)">+ Add item</button>` +
     ps.map(p=>{ let h=''; if(p.cat!==last){ h=`<div class="section-title">${esc(p.cat||'Other')}</div>`; last=p.cat; }
-      return h+`<div class="list-item"><div>${esc(p.name)} ${p.active===false?'<span class="pill red">hidden</span>':''}<br><span class="muted" style="font-size:12px">${fmt(p.price)} / ${esc(p.unit||'pc')} · ${p.type||'food'}${isTracked(p)?` · stock ${p.stock}`:''}</span></div><div class="row" style="gap:6px"><button class="btn sm" onclick="itemEditModal(${p.id},null)">Edit</button>${(p.type==='overtime'||p.type==='accompany')?'':`<button class="btn sm" style="border-color:var(--red);color:var(--red)" onclick="deleteItem(${p.id})">✕</button>`}</div></div>`; }).join('');
+      return h+`<div class="list-item"><div>${esc(p.name)} ${p.active===false?'<span class="pill red">hidden</span>':''}<br><span class="muted" style="font-size:12px">${fmt(p.price)} / ${esc(p.unit||'pc')} · ${p.type||'food'}</span></div><div class="row" style="gap:6px"><button class="btn sm" onclick="itemEditModal(${p.id},null)">Edit</button>${(p.type==='overtime'||p.type==='accompany')?'':`<button class="btn sm" style="border-color:var(--red);color:var(--red)" onclick="deleteItem(${p.id})">✕</button>`}</div></div>`; }).join('');
 }
 async function itemEditModal(id, returnSid){
   if(returnSid){ if(!can('createItem')){ tell('Creating items needs permission.'); return; } } else if(!needAdmin()) return;
-  const p = id ? await dbGet('products', id) : { name:'', cat:'', type:'food', unit:'pc', price:0, stock:0, min:0, trackStock:true, active:true };
+  const p = id ? await dbGet('products', id) : { name:'', cat:'', type:'food', unit:'pc', price:0, active:true };
   const cats = [...new Set((await dbAll('products')).map(x=>x.cat).filter(Boolean))];
-  const types = ['food','beverage','combo','merch','other','overtime','accompany'];
+  const types = ['food','beverage','combo','membership','event','merch','other','overtime','accompany'];
   openModal(`<button class="close" onclick="closeModal()">✕</button><h3>${id?'Edit':'New'} item</h3>
     <label>Name</label><input id="ieName" value="${esc(p.name)}"><label>Category</label><input id="ieCat" value="${esc(p.cat)}" list="ieCats"><datalist id="ieCats">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
     <div class="grid2"><div><label>Type</label><select id="ieType">${types.map(t=>`<option ${t===(p.type||'food')?'selected':''}>${t}</option>`).join('')}</select></div><div><label>Unit</label><input id="ieUnit" value="${esc(p.unit||'pc')}"></div></div>
     <label>Price (₹)</label><input id="iePrice" type="number" min="0" value="${p.price}">
-    <label style="display:flex;gap:8px;align-items:center"><input id="ieTrack" type="checkbox" style="width:auto" ${p.trackStock!==false?'checked':''}> Track stock</label>
-    <div class="grid2"><div><label>Stock</label><input id="ieStock" type="number" value="${p.stock||0}"></div><div><label>Low-stock alert at</label><input id="ieMin" type="number" value="${p.min||0}"></div></div>
     <label style="display:flex;gap:8px;align-items:center"><input id="ieActive" type="checkbox" style="width:auto" ${p.active!==false?'checked':''}> Available in the Add New Line picker</label>
     <button class="btn primary" style="margin-top:12px" onclick="saveItem(${id||'null'},${returnSid||'null'})">Save item</button>`);
 }
@@ -2685,8 +3040,7 @@ async function saveItem(id, returnSid){
   const g=x=>document.getElementById(x); const name=g('ieName').value.trim(); const price=Number(g('iePrice').value);
   if(!name){ tell('Enter a name.'); return; } if(!(price>=0)){ tell('Enter a valid price.'); return; }
   const p = id ? await dbGet('products', id) : {};
-  Object.assign(p, { name, cat:g('ieCat').value.trim()||'Other', type:g('ieType').value, unit:g('ieUnit').value.trim()||'pc', price, trackStock:g('ieTrack').checked, stock:Number(g('ieStock').value)||0, min:Number(g('ieMin').value)||0, active:g('ieActive').checked });
-  if(p.type==='overtime'||p.type==='accompany') p.trackStock=false;
+  Object.assign(p, { name, cat:g('ieCat').value.trim()||'Other', type:g('ieType').value, unit:g('ieUnit').value.trim()||'pc', price, active:g('ieActive').checked });
   await dbPut('products', p);
   closeModal(); render();
 }
@@ -2920,7 +3274,7 @@ function screenBackup(){
     <div class="section-title" style="margin-top:0">Back up</div>
     <p style="margin:0 0 10px" id="bkLast">${backupLine()}</p>
     <div class="grid2"><button class="btn primary" onclick="downloadBackup()">Download backup file</button><button class="btn" onclick="shareBackup()">Share / save to Drive</button></div>
-    <p class="muted" style="font-size:12px;margin-top:8px">The file holds everything: customers, gaming sessions and segments, items, gaming setups, invoices and payments, expenses, purchases, inventory, vendors, employees, cash &amp; bank, and business settings. “Share” opens your phone's share menu (Google Drive, Files, WhatsApp, email).</p>
+    <p class="muted" style="font-size:12px;margin-top:8px">The file holds everything: customers, gaming sessions and segments, items, gaming setups, invoices and payments, expenses, purchases, vendors, employees, cash &amp; bank, and business settings. “Share” opens your phone's share menu (Google Drive, Files, WhatsApp, email).</p>
   </div>
   <div class="card">
     <div class="section-title" style="margin-top:0">Restore</div>
@@ -2938,7 +3292,7 @@ function screenBackup(){
 async function withTimeout(p, ms){ return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]); }
 async function buildBackup(){
   const data = { __meta:{ app:'LVL Books', format:2, createdAt:Date.now(), counts:{} } };
-  for(const store of ALL_STORES){
+  for(const store of BACKUP_STORES){
     let rows; try{ rows = await withTimeout(dbAllFresh(store), 8000); }catch(e){ rows = await dbAll(store); }   // full history when reachable, saved copy otherwise
     data[store] = rows; data.__meta.counts[store] = rows.length;
   }
@@ -2975,7 +3329,7 @@ function dismissBackupReminder(){ state.showBackupReminder = false; renderNav();
 function validateBackup(obj){
   if(!obj || typeof obj!=='object' || Array.isArray(obj)) return { ok:false, error:'This file is not an LVL Books backup.' };
   const counts = {}; let known = 0;
-  for(const store of ALL_STORES){
+  for(const store of BACKUP_STORES){
     if(obj[store]===undefined) continue;
     if(!Array.isArray(obj[store])) return { ok:false, error:`The “${store}” section of this file is damaged.` };
     const kp = KEYPATH[store] || 'id';
@@ -2985,7 +3339,7 @@ function validateBackup(obj){
   if(!known) return { ok:false, error:'No LVL Books data was found in this file.' };
   return { ok:true, data:obj, counts, when:(obj.__meta && obj.__meta.createdAt) || null };
 }
-const BACKUP_LABELS = { customers:'Customers', bsessions:'Gaming sessions', invoices:'Invoices', products:'Items', stations:'Gaming setups', expenses:'Expenses', purchases:'Purchases', inventoryTx:'Stock movements', vendors:'Vendors', employees:'Employees', accounts:'Cash & bank', settings:'Settings' };
+const BACKUP_LABELS = { customers:'Customers', bsessions:'Gaming sessions', invoices:'Invoices', products:'Items', stations:'Gaming setups', expenses:'Expenses', purchases:'Purchases', inventoryTx:'Old stock records (kept, unused)', vendors:'Vendors', employees:'Employees', accounts:'Cash & bank', settings:'Settings' };
 async function previewRestore(){
   const box = document.getElementById('restorePreview'), btn = document.getElementById('restoreBtn'); window.__restore = null; btn.disabled = true;
   const file = document.getElementById('restoreFile').files[0]; if(!file){ box.textContent=''; return; }
@@ -3003,7 +3357,7 @@ async function doRestore(){
   if(!(await askConfirm(`Restore this backup${v.when?' from '+new Date(v.when).toLocaleString('en-IN'):''}?\n\nIt replaces ALL current data with: ${summary}.\n\nTip: download a backup of the current data first.`,'Restore',true))) return;
   const btn = document.getElementById('restoreBtn'); if(btn){ btn.disabled=true; btn.textContent='Restoring…'; }
   try{
-    for(const store of ALL_STORES){ if(v.data[store]===undefined) continue; await dbClear(store); for(const row of v.data[store]) await dbPut(store, row); }
+    for(const store of BACKUP_STORES){ if(v.data[store]===undefined) continue; await dbClear(store); for(const row of v.data[store]) await dbPut(store, row); }
     await reseedCounters();
     await loadSettingsAndSeed(); await rebuildDailyRecords(); await maybeAutoBackup();
     window.__restore = null; tell('Data restored.'); go('dashboard');
@@ -3022,7 +3376,7 @@ async function reseedCounters(){   // so new invoice / session numbers continue 
 async function doClearAll(){
   if(!(await askConfirm('This will permanently delete ALL data. Are you sure?'))) return;
   if(!(await askConfirm('Really sure? This cannot be undone.'))) return;
-  for(const store of ALL_STORES){ await dbClear(store); }
+  for(const store of BACKUP_STORES){ await dbClear(store); }
   liveSessions=[]; await loadSettingsAndSeed(); go('dashboard');
 }
 
