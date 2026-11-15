@@ -304,6 +304,10 @@ body.zb-on{--bg:#000;--panel:#1c1c1e;--panel2:#2c2c2e;--line:#3a3a3c;--text:#fff
 .zqty{gap:8px}
 .zqty input{width:76px!important;text-align:right}
 .zstep{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#2c2c2e;color:#fff;font-size:20px;line-height:1;cursor:pointer;padding:0}
+.tier{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.3px;color:#111;background:#9aa0a6}
+.tier-bronze{background:#cd7f32}.tier-silver{background:#c8ccd2}.tier-gold{background:#f5c542}.tier-platinum{background:#9ad7ff}
+.membox{border:1px solid var(--line);border-radius:12px;padding:10px;background:rgba(255,255,255,.03)}
+.memline{display:flex;gap:8px;align-items:center;padding:8px 0;min-height:44px}
 .zclr{background:transparent;border:0;color:#8e8e93;padding:0;display:inline-flex;cursor:pointer}
 .zclr svg{width:22px;height:22px}
 .zhint{color:var(--muted);font-size:12.5px;padding:0 0 12px}
@@ -379,8 +383,8 @@ function waitForFirebase(){
   });
 }
 const KEYPATH = { customers:'mobile', bsessions:'id', invoices:'id', products:'id', expenses:'id', settings:'key', vendors:'id', purchases:'id',
-  employees:'id', employeeTx:'id', accounts:'name', dailyRecords:'date', stations:'id', inventoryTx:'id', physical:'id', deletedInvoices:'id', auditLog:'id' };
-const AUTOINC = new Set(['bsessions','invoices','products','expenses','vendors','purchases','employees','employeeTx','stations','inventoryTx','physical','auditLog']);
+  employees:'id', employeeTx:'id', accounts:'name', dailyRecords:'date', stations:'id', inventoryTx:'id', physical:'id', deletedInvoices:'id', auditLog:'id', memberships:'id', loyaltyTx:'id' };
+const AUTOINC = new Set(['bsessions','invoices','products','expenses','vendors','purchases','employees','employeeTx','stations','inventoryTx','physical','auditLog','memberships','loyaltyTx']);
 const WINDOWED = { invoices:{field:'date',days:120}, bsessions:{field:'startTime',days:120} };
 const __cache = {}, __ready = {};
 function clean(v){ return v===undefined ? v : JSON.parse(JSON.stringify(v)); }   // deep copy; also strips undefined (Firestore rejects it)
@@ -597,17 +601,19 @@ function billTotals(lines, gamingDiscountPct, settings, extra){
   const subtotal = b.gaming+b.accompany+b.overtime+b.food+b.other;
   const pct = Math.min(100, Math.max(0, Number(gamingDiscountPct)||0));
   const discount = Math.round(b.gaming*pct/100);
+  const x0 = extra||{}; const memFree=Math.round(Number(x0.memFree)||0), memDisc=Math.round(Number(x0.memDisc)||0), memFood=Math.round(Number(x0.memFood)||0), loyalty=Math.round(Number(x0.loyalty)||0);
+  const benefit = memFree+memDisc+memFood+loyalty;   // membership + loyalty reductions (never combined with the manual discount: checkout forces that to 0 when a membership applies)
   let tax = 0;
   if(settings.taxEnabled){
     const taxable = lines.filter(l=>l.taxable!==false).reduce((s,l)=>s+l.total,0);
     const gTaxable = lines.filter(l=>l.taxable!==false && l.bucket==='gaming').reduce((s,l)=>s+l.total,0);
     const dTax = b.gaming>0 ? discount*gTaxable/b.gaming : 0;
-    tax = Math.round((taxable - dTax) * (Number(settings.taxRate)||0)/100);
+    tax = Math.max(0, Math.round((taxable - dTax - (subtotal>0 ? benefit*taxable/subtotal : 0)) * (Number(settings.taxRate)||0)/100));
   }
   const x = extra||{}; const adjustment = Math.round(Number(x.adjustment)||0);          // whole rupees: totals stay exact integers
-  const tcs = Math.round((subtotal - discount + tax) * (Number(x.tcsPct)||0) / 100);   // collected on top, like tax
-  const tds = Math.round((subtotal - discount) * (Number(x.tdsPct)||0) / 100);          // deducted by the customer
-  return { ...b, subtotal, discountPct:pct, discount, tax, adjustment, tcs, tds, grand: subtotal - discount + tax + adjustment + tcs - tds };
+  const tcs = Math.round((subtotal - discount - benefit + tax) * (Number(x.tcsPct)||0) / 100);   // collected on top, like tax
+  const tds = Math.round((subtotal - discount - benefit) * (Number(x.tdsPct)||0) / 100);          // deducted by the customer
+  return { ...b, subtotal, discountPct:pct, discount, memFree, memDisc, memFood, loyalty, benefit, tax, adjustment, tcs, tds, grand: subtotal - discount - benefit + tax + adjustment + tcs - tds };
 }
 function overtimeUnitLabel(s){
   if(s.overtimeMode==='occurrence') return 'occurrence';
@@ -616,7 +622,7 @@ function overtimeUnitLabel(s){
   return (s.overtimeBlockMinutes||10)+'-min block';
 }
 
-const ALL_STORES = ['customers','bsessions','invoices','products','expenses','settings','vendors','purchases','employees','employeeTx','accounts','dailyRecords','stations','physical','deletedInvoices','auditLog'];
+const ALL_STORES = ['customers','bsessions','invoices','products','expenses','settings','vendors','purchases','employees','employeeTx','accounts','dailyRecords','stations','physical','deletedInvoices','auditLog','memberships','loyaltyTx'];
 /* Inventory was removed from the app. Old stock records are no longer synced or shown, but they stay in the database and in every backup. */
 const BACKUP_STORES = [...ALL_STORES, 'inventoryTx'];
 
@@ -764,7 +770,7 @@ const NAV = [
 ];
 function renderNav(){
   document.getElementById('navbar').innerHTML = NAV.map(n=>`
-    <button class="navbtn ${(state.screen===n.id || (n.id==='gaming' && ['session','checkout','picker'].includes(state.screen)) || (n.id==='invoices' && state.screen==='invoiceView') || (n.id==='more' && /^set_|settings|backup|adminInvoices/.test(state.screen)))?'active':''}" onclick="navTab('${n.id}')"><span class="ic">${n.ic}</span>${n.label}${n.id==='more' && state.showBackupReminder ? '<span class="dot" aria-label="Backup due"></span>' : ''}</button>`).join('');
+    <button class="navbtn ${(state.screen===n.id || (n.id==='gaming' && ['session','checkout','picker'].includes(state.screen)) || (n.id==='invoices' && state.screen==='invoiceView') || (n.id==='more' && /^set_|settings|backup|adminInvoices|membership|loyalty|lmReports/.test(state.screen)))?'active':''}" onclick="navTab('${n.id}')"><span class="ic">${n.ic}</span>${n.label}${n.id==='more' && state.showBackupReminder ? '<span class="dot" aria-label="Backup due"></span>' : ''}</button>`).join('');
 }
 /* ---- Android-style navigation ----
    navStack is the in-memory Back stack (screens you can go Back to). The Android Back button / gesture arrives as a browser
@@ -997,7 +1003,7 @@ async function render(){
     vendors:screenVendors, vendorProfile:screenVendorProfile, purchases:screenPurchases, employees:screenEmployees, employeeProfile:screenEmployeeProfile,
     cashbank:screenCashBank, reports:screenReports, session:screenSession, checkout:screenCheckout, invoiceView:screenInvoiceView,
     set_items:screenSetItems, set_stations:screenSetStations, set_pricing:screenSetPricing, set_custom:screenSetCustom, set_overtime:screenSetOvertime,
-    set_accompany:screenSetAccompany, picker:screenPicker, itemInfo:screenItemInfo, set_physical:screenSetPhysical, set_tax:screenSetTax, set_invoice:screenSetInvoice, set_business:screenSetBusiness, set_perm:screenSetPerm, adminInvoices:screenAdminInvoices };
+    set_accompany:screenSetAccompany, picker:screenPicker, itemInfo:screenItemInfo, set_physical:screenSetPhysical, set_tax:screenSetTax, set_invoice:screenSetInvoice, set_business:screenSetBusiness, set_perm:screenSetPerm, adminInvoices:screenAdminInvoices, membership:screenMembership, loyalty:screenLoyalty, lmReports:screenLmReports };
   const fn = SCREENS[state.screen] || screenDashboard;
   let body;
   try{ body = await fn(); }
@@ -1458,7 +1464,7 @@ async function openLineEdit(sid, lid){
   go('itemInfo');
 }
 function iiTemp(){
-  const ii = state.ii; const q = Number(ii.qty)||0, r = Number(ii.rate)||0;
+  const ii = state.ii; const q = iiNum(ii.qty), r = iiNum(ii.rate);
   if(ii.kind==='gaming') return computeLine({ kind:'gaming', minutes:Math.round(q*60), hr:r, half:ii.half0&&ii.rate0?Math.round(ii.half0*r/ii.rate0):Math.round(r/2), discountPct:ii.discountPct });
   if(ii.kind==='accompany') return computeLine({ kind:'accompany', qty:q, unitPrice:r, minutes:Number(ii.minutes)||0, free:ii.free, discountPct:ii.discountPct });
   return computeLine({ kind:'item', qty:q, unitPrice:r, discountPct:ii.discountPct });
@@ -1466,15 +1472,19 @@ function iiTemp(){
 function iiRefresh(){ const el=document.getElementById('iiAmt'); if(el && state.ii) el.textContent=n2(iiTemp().total); const h=document.getElementById('iiHint'); if(h) h.innerHTML=iiHintHtml(); }
 function iiHintHtml(){
   const ii=state.ii; if(!ii) return '';
-  if(ii.kind==='gaming'){ const m=Math.round((Number(ii.qty)||0)*60); return `${fmtDur(m)} billed${ii.lid?'':' · the timer starts when you save'}`; }
+  if(ii.kind==='gaming'){ const m=Math.round(iiNum(ii.qty)*60); return `${fmtDur(m)} billed${ii.lid?'':' · the timer starts when you save'}`; }
   if(ii.kind==='accompany') return ii.free ? 'Free — parent accompanying child' : `${ii.qty||0} person(s) × ${fmtDur(Number(ii.minutes)||0)}`;
   return '';
 }
 function iiSet(k, v){ if(!state.ii) return; if(k==='qty'||k==='rate') state.ii[k] = v; else state.ii[k]=v; iiRefresh(); }
+function iiNum(v){ const n=Number(String(v==null?'':v).replace(',','.').trim()); return isFinite(n)?n:0; }
 function iiStep(d){
-  const ii=state.ii; const step = ii.kind==='gaming' ? 0.5 : 1; let q = (Number(ii.qty)||0)+d*step; if(q<=0) q = step>=1?1:0.5;
-  ii.qty = Math.round(q*100)/100; const e=document.getElementById('iiQty'); if(e) e.value=ii.qty; iiRefresh();
+  const ii=state.ii; const e=document.getElementById('iiQty'); const step = ii.kind==='gaming' ? 0.5 : 1;
+  let q = iiNum(e ? e.value : ii.qty) + d*step;                      // read what is on screen, so typed values and +/− never disagree
+  if(q<=0) q = step;                                                 // never zero or negative
+  q = Math.round(q*100)/100; ii.qty = q; if(e) e.value = q; iiRefresh();
 }
+function iiQtyBlur(){ const ii=state.ii; if(!ii) return; const e=document.getElementById('iiQty'); const q=iiNum(e&&e.value); if(q>0){ ii.qty=Math.round(q*100)/100; if(e) e.value=ii.qty; } iiRefresh(); }
 function iiClear(){ const ii=state.ii; ii.qty=''; const e=document.getElementById('iiQty'); if(e){ e.value=''; e.focus(); } iiRefresh(); }
 async function screenItemInfo(){
   const ii = state.ii; if(!ii) return zhead('Item Information',{back:1,fallback:'dashboard'}) + `<div class="zempty">Nothing to edit.</div><button class="btn" onclick="go('dashboard')">Back</button>`;
@@ -1486,7 +1496,7 @@ async function screenItemInfo(){
       <div class="zrow ${ii.lid?'':'tap'}" ${ii.lid?'':`role="button" tabindex="0" onclick="iiPickModal()" onkeydown="if(event.key==='Enter')iiPickModal()"`}><span class="l">Item</span><span class="v">${esc(ii.name)}</span>${ii.lid?'':ZI.chev}</div>
       <div class="zrow col"><span class="l">Description</span><textarea id="iiDesc" rows="4" placeholder="Optional" oninput="iiSet('desc',this.value)">${esc(ii.desc)}</textarea></div>
       <div class="zrow"><span class="l req">${hrs?'Quantity (hours)':ii.kind==='accompany'?'Quantity (persons)':'Quantity'}</span>
-        <span class="v zqty"><button type="button" class="zstep" aria-label="Decrease quantity" onclick="iiStep(-1)">−</button><input id="iiQty" inputmode="decimal" value="${esc(ii.qty)}" oninput="iiSet('qty',this.value)" aria-label="Quantity"><button type="button" class="zstep" aria-label="Increase quantity" onclick="iiStep(1)">+</button><button type="button" class="zclr" aria-label="Clear quantity" onclick="iiClear()">${ZI.clear}</button></span></div>
+        <span class="v zqty"><button type="button" class="zstep" aria-label="Decrease quantity" onclick="iiStep(-1)">−</button><button type="button" class="zstep" aria-label="Increase quantity" onclick="iiStep(1)">+</button><input id="iiQty" type="text" inputmode="decimal" autocomplete="off" value="${esc(ii.qty)}" onfocus="this.select()" oninput="iiSet('qty',this.value)" onblur="iiQtyBlur()" aria-label="Quantity"><button type="button" class="zclr" aria-label="Clear quantity" onclick="iiClear()">${ZI.clear}</button></span></div>
       ${ii.kind==='accompany'?`<div class="zrow"><span class="l">Duration (minutes)</span><span class="v"><input id="iiMin" inputmode="numeric" value="${esc(ii.minutes)}" oninput="iiSet('minutes',this.value)"></span></div>
         <div class="zrow"><label class="l" for="iiFree">Free — parent accompanying child</label><span class="v"><input id="iiFree" type="checkbox" ${ii.free?'checked':''} onchange="iiSet('free',this.checked)"></span></div>`:''}
       ${ii.kind==='combo'?sel(0)+sel(1):''}
@@ -1851,13 +1861,14 @@ async function openCheckout(sid){
   else { const iv=s.inv||{}; state.ckForm = { sid, name:s.customerName||'', mobile:s.customerMobile||'', discountPct:finOf(s).discountPct, date:iv.date||ymd(Date.now()), terms:iv.terms||st.dueTermsDefault||'Due on receipt', orderNo:iv.orderNo||'', salesperson:iv.salesperson!==undefined?iv.salesperson:(st.salesperson||''), subject:iv.subject||'', notes:s.notes||'', payments:[] }; }
   go('checkout');
 }
-function ckTotals(){ return billTotals(state.ckSession.lines, state.ckForm.discountPct, state.settings, finOf(state.ckSession)); }
+function ckTotals(){ return ckPlan().t; }
 function ckPaid(){ return state.ckForm.payments.reduce((a,p)=>a+Math.round(Number(p.amount)||0),0); }
 function ckSummaryHtml(){
   const t = ckTotals(), paid = ckPaid(), st = state.settings;
   return `<table>
     <tr><td>Subtotal</td><td class="right">${fmt(t.subtotal)}</td></tr>
     <tr><td>Discount (${t.discountPct}% of gaming only)</td><td class="right">-${fmt(t.discount)}</td></tr>
+    ${t.memFree?`<tr><td>Membership free hours</td><td class="right">-${fmt(t.memFree)}</td></tr>`:''}${t.memDisc?`<tr><td>Member gaming discount</td><td class="right">-${fmt(t.memDisc)}</td></tr>`:''}${t.memFood?`<tr><td>Member snacks &amp; drinks discount</td><td class="right">-${fmt(t.memFood)}</td></tr>`:''}${t.loyalty?`<tr><td>Loyalty points redeemed</td><td class="right">-${fmt(t.loyalty)}</td></tr>`:''}
     ${st.taxEnabled?`<tr><td>${esc(st.taxLabel||'Tax')} (${st.taxRate}%)</td><td class="right">${fmt(t.tax)}</td></tr>`:''}
     ${t.adjustment?`<tr><td>Adjustment</td><td class="right">${fmt(t.adjustment)}</td></tr>`:''}${t.tcs?`<tr><td>TCS</td><td class="right">${fmt(t.tcs)}</td></tr>`:''}${t.tds?`<tr><td>TDS</td><td class="right">-${fmt(t.tds)}</td></tr>`:''}
     <tr class="total-row"><td>Grand total</td><td class="right">${fmt(t.grand)}</td></tr>
@@ -1892,6 +1903,7 @@ function ckAddPay(){ const used=state.ckForm.payments.map(p=>p.method); const m=
 function ckPayFull(method){ state.ckForm.payments=[{method, amount:ckTotals().grand}]; document.getElementById('ckPays').innerHTML=ckPayRowsHtml(); ckRefresh(); }
 async function ckLookup(){
   const badge=document.getElementById('ckBadge'); if(!badge) return;
+  ckBenRefresh();
   const raw=state.ckForm.mobile.trim(); if(!raw){ badge.innerHTML=''; return; }
   const m=normMobile(raw);
   if(!m){ badge.innerHTML='<span class="pill red">Not a valid 10-digit Indian mobile yet</span>'; return; }
@@ -1921,6 +1933,8 @@ async function screenCheckout(){
       <label>Customer name</label><input id="ckName" value="${esc(f.name)}" placeholder="Customer or group name" oninput="ck('name',this.value)">
       <div class="muted" style="font-size:11px;margin-top:4px">Both are optional. Without a mobile number no WhatsApp bill can be opened and no customer record is created.</div>
     </div>
+    <div class="section-title">Membership &amp; Loyalty</div>
+    <div class="card" id="ckBenBox">${ckBenHtml()}</div>
     <div class="section-title">Item Details</div>
     <div class="card">${grouped.map(([b,ls])=>`<div class="muted" style="font-size:11px;margin-top:6px;text-transform:uppercase">${names[b]}</div>`+ls.map(l=>`<div class="list-item"><span>${esc(l.name)}<br><span class="muted" style="font-size:12px">${lineDetail(l)}${l.discountPct?` · ${l.discountPct}% off`:''}</span></span><b>${fmt(l.total)}</b></div>`).join('')).join('')}
       <button class="btn sm" style="margin-top:8px" onclick="openSession(${s.id})">Edit bill</button></div>
@@ -1934,7 +1948,7 @@ async function screenCheckout(){
       <div><label>Salesperson</label><input value="${esc(f.salesperson)}" oninput="ck('salesperson',this.value)"></div></div>
       <label>Subject / notes (optional)</label><input value="${esc(f.subject)}" oninput="ck('subject',this.value)">
       <label>Discount % — applies to gaming lines only, never food ${can('discount')?'':'<span class="muted">(needs permission)</span>'}</label>
-      <input type="number" min="0" max="100" value="${f.discountPct}" ${can('discount')?'':'disabled'} oninput="ck('discountPct',this.value)">
+      <input id="ckDiscIn" type="number" min="0" max="100" value="${f.discountPct}" ${can('discount')?'':'disabled'} oninput="ck('discountPct',this.value)"><div class="muted" style="font-size:11px" id="ckDiscNote"></div>
     </div>
     <div class="section-title">Payment</div>
     <div class="card">
@@ -1948,7 +1962,7 @@ async function finalizeCheckout(){
   const btn=document.getElementById('ckFinalize'); if(btn){ btn.disabled=true; btn.style.opacity='.5'; }
   try{
     const f=state.ckForm; const s=await dbGet('bsessions', f.sid);
-    const t = billTotals(s.lines, f.discountPct, state.settings, finOf(s)); const paid = ckPaid();
+    state.ckSession = s; const t = ckPlan().t; const paid = ckPaid();
     if(t.grand-paid>0 && !(await askConfirm(paid>0 ? `Only ${fmt(paid)} (${f.payments.filter(p=>Math.round(Number(p.amount)||0)>0).map(p=>p.method).join(' + ')}) is recorded. Balance of ${fmt(t.grand-paid)} will remain due on this invoice. Finalize anyway?` : `No payment method is selected, so this invoice will be saved as UNPAID (${fmt(t.grand)} due). Finalize anyway?`,'Finalize'))) throw {silent:true};
     const inv = await finalizeSessionCore(f);
     state.ckForm=null; state.ckSession=null; state.invoiceId=inv.id;
@@ -1968,7 +1982,8 @@ async function finalizeSessionCore(f, opts){
   if(mobRaw && !mob) throw new Error('Enter a valid 10-digit Indian mobile number, or leave it blank.');
   const name=(f.name||'').trim();
   const date = opts.date || Date.now();
-  const t = billTotals(s.lines, f.discountPct, settings, finOf(s));
+  const mem = mob ? await activeMembership(mob) : null, acct = mob ? await loyaltyAccount(mob) : null;
+  const plan = benefitPlan(s.lines, Object.assign({}, f, { memOn: f.memOn===true }), settings, mem, acct, finOf(s)); const t = plan.t;
   const payments = (f.payments||[]).map(p=>({ method:p.method, amount:Math.round(Number(p.amount)||0), date })).filter(p=>p.amount>0);
   const paid = payments.reduce((a,p)=>a+p.amount,0);
   if(paid>t.grand) throw new Error(`Payments (${fmt(paid)}) are more than the invoice total (${fmt(t.grand)}).`);
@@ -1984,6 +1999,8 @@ async function finalizeSessionCore(f, opts){
     sessionId:s.id, sessionCode:sesCode(s), groupName:s.groupName||'', customerName:name||'Walk-in Customer', customerMobile:mob,
     lines, gamingAmount:t.gaming, accompanyAmount:t.accompany, overtimeAmount:t.overtime, foodAmount:t.food, otherAmount:t.other,
     subtotal:t.subtotal, discountPercent:t.discountPct, discount:t.discount, tax:t.tax, adjustmentAmt:t.adjustment, tcs:t.tcs, tds:t.tds, taxLabel:settings.taxEnabled?`${settings.taxLabel||'Tax'} ${settings.taxRate}%`:'',
+    memFree:t.memFree, memDisc:t.memDisc, memFood:t.memFood, loyaltyValue:t.loyalty, loyaltyPoints:plan.loyaltyPts, benefitTotal:t.benefit,
+    membership: plan.mem ? { id:plan.mem.id, planName:plan.mem.planName, tier:plan.mem.tier, period:plan.mem.period, gamingDiscount:plan.mem.gamingDiscount, foodDiscount:plan.mem.foodDiscount, freeMinutes:plan.freeMin, items:plan.items } : null,
     grandTotal:t.grand, payments, adjustments:[], paymentMethod:payments.map(p=>p.method).join(' + ')||'Unpaid',
     durationMins:gl.reduce((a,l)=>a+l.minutes,0), status:'finalized' };
   inv.status = invoiceBalance(inv)<=0 ? 'paid' : 'finalized';
@@ -2004,6 +2021,7 @@ async function finalizeSessionCore(f, opts){
     await dbPut('customers', c);
   });
   await soft(async()=>{ for(const p of payments) await creditAccount(p.method, p.amount); });
+  await soft(async()=>{ await applyBenefitsToInvoice(inv, plan, mob); });
   await soft(async()=>{ await updateDailyRecord(dateKey(date)); });
   return inv;
 }
@@ -2043,6 +2061,7 @@ function invoiceText(inv){
   ['gaming','accompany','overtime','food','other'].forEach(b=>{ const ls=L.filter(x=>x.bucket===b); if(!ls.length) return; out.push('', BUCKET_TITLE[b]); ls.forEach(x=>out.push(`${x.text} — ${fmt(x.amount)}`)); });
   out.push('', `Subtotal: ${fmt(inv.subtotal)}`);
   if(inv.discount) out.push(`Discount${inv.discountPercent?' ('+inv.discountPercent+'% on gaming)':''}: -${fmt(inv.discount)}`);
+  invBenefitRows(inv).forEach(([a,b])=>out.push(`${a}: ${b}`));
   if(inv.tax) out.push(`${inv.taxLabel||'Tax'}: ${fmt(inv.tax)}`);
   if(inv.adjustmentAmt) out.push(`Adjustment: ${fmt(inv.adjustmentAmt)}`);
   if(inv.tcs) out.push(`TCS: ${fmt(inv.tcs)}`);
@@ -2076,7 +2095,7 @@ function invoicePdfLines(inv){
   if(inv.sessionCode) o.push(`Session: ${inv.sessionCode}${inv.groupName?'  Group: '+inv.groupName:''}`);
   o.push(rule); const L=invoiceLines(inv);
   ['gaming','accompany','overtime','food','other'].forEach(b=>{ const ls=L.filter(x=>x.bucket===b); if(!ls.length) return; o.push(BUCKET_TITLE[b].replace(/^\S+\s/,'')); ls.forEach(x=>row(x.text,fmt(x.amount)).forEach(r=>o.push(r))); o.push(''); });
-  o.push(rule); [['Subtotal',fmt(inv.subtotal)], ...(inv.discount?[['Discount (gaming only)','-'+fmt(inv.discount)]]:[]), ...(inv.tax?[[inv.taxLabel||'Tax',fmt(inv.tax)]]:[]), ['TOTAL',fmt(inv.grandTotal)]].forEach(([a,b])=>row(a,b).forEach(r=>o.push(r)));
+  o.push(rule); [['Subtotal',fmt(inv.subtotal)], ...(inv.discount?[['Discount (gaming only)','-'+fmt(inv.discount)]]:[]), ...invBenefitRows(inv), ...(inv.tax?[[inv.taxLabel||'Tax',fmt(inv.tax)]]:[]), ['TOTAL',fmt(inv.grandTotal)]].forEach(([a,b])=>row(a,b).forEach(r=>o.push(r)));
   if(inv.payments){ (inv.payments||[]).forEach(p=>row('Paid - '+p.method+(p.amount<0?' (refund)':''),fmt(p.amount)).forEach(r=>o.push(r))); row('Balance due',fmt(Math.max(0,invoiceBalance(inv)))).forEach(r=>o.push(r)); }
   o.push(rule, st.footer||''); return o;
 }
@@ -2094,7 +2113,7 @@ async function printInvoice(id){
     <h3>Invoice ${esc(inv.number)}</h3><div>Date: ${new Date(inv.date).toLocaleDateString('en-IN')} · Due: ${esc(inv.dueDate||'on receipt')}</div>
     <div>Customer: ${esc(inv.customerName)} ${esc(inv.customerMobile||'')}</div>
     <table>${['gaming','accompany','overtime','food','other'].map(sec).join('')}
-      <tr><td>Subtotal</td><td class="right">₹${Math.round(inv.subtotal)}</td></tr>${inv.discount?`<tr><td>Discount (gaming only)</td><td class="right">-₹${Math.round(inv.discount)}</td></tr>`:''}${inv.tax?`<tr><td>${esc(inv.taxLabel||'Tax')}</td><td class="right">₹${Math.round(inv.tax)}</td></tr>`:''}${inv.adjustmentAmt?`<tr><td>Adjustment</td><td class="right">₹${Math.round(inv.adjustmentAmt)}</td></tr>`:''}${inv.tcs?`<tr><td>TCS</td><td class="right">₹${Math.round(inv.tcs)}</td></tr>`:''}${inv.tds?`<tr><td>TDS</td><td class="right">-₹${Math.round(inv.tds)}</td></tr>`:''}
+      <tr><td>Subtotal</td><td class="right">₹${Math.round(inv.subtotal)}</td></tr>${inv.discount?`<tr><td>Discount (gaming only)</td><td class="right">-₹${Math.round(inv.discount)}</td></tr>`:''}${invBenefitRows(inv).map(([a,b])=>`<tr><td>${esc(a)}</td><td class="right">${esc(b)}</td></tr>`).join('')}${inv.tax?`<tr><td>${esc(inv.taxLabel||'Tax')}</td><td class="right">₹${Math.round(inv.tax)}</td></tr>`:''}${inv.adjustmentAmt?`<tr><td>Adjustment</td><td class="right">₹${Math.round(inv.adjustmentAmt)}</td></tr>`:''}${inv.tcs?`<tr><td>TCS</td><td class="right">₹${Math.round(inv.tcs)}</td></tr>`:''}${inv.tds?`<tr><td>TDS</td><td class="right">-₹${Math.round(inv.tds)}</td></tr>`:''}
       <tr class="tot"><td>GRAND TOTAL</td><td class="right">₹${Math.round(inv.grandTotal)}</td></tr>
       ${(inv.payments||[]).map(p=>`<tr><td>Paid — ${esc(p.method)}</td><td class="right">₹${Math.round(p.amount)}</td></tr>`).join('')}<tr><td><b>Balance due</b></td><td class="right"><b>₹${Math.max(0,invoiceBalance(inv))}</b></td></tr></table>
     <p>${esc(s.footer||'')}</p><script>window.print()<\/script></body></html>`);
@@ -2139,7 +2158,7 @@ async function screenInvoiceView(){
     <div class="card"><div>${esc(inv.customerName)}${inv.customerMobile?' · '+inv.customerMobile:''}</div>
       <div class="muted" style="font-size:12px">${new Date(inv.date).toLocaleString('en-IN')}${inv.dueDate?' · due '+inv.dueDate:''}${inv.sessionCode?' · '+inv.sessionCode:''}${inv.groupName?' · '+esc(inv.groupName):''}${inv.salesperson?' · by '+esc(inv.salesperson):''}</div>${inv.subject?`<div class="muted" style="font-size:12px">${esc(inv.subject)}</div>`:''}</div>
     <div class="card">${['gaming','accompany','overtime','food','other'].map(sec).join('')}
-      <table style="margin-top:8px"><tr><td>Subtotal</td><td class="right">${fmt(inv.subtotal)}</td></tr>${inv.discount?`<tr><td>Discount (${inv.discountPercent||''}% gaming only)</td><td class="right">-${fmt(inv.discount)}</td></tr>`:''}${inv.tax?`<tr><td>${esc(inv.taxLabel||'Tax')}</td><td class="right">${fmt(inv.tax)}</td></tr>`:''}${inv.adjustmentAmt?`<tr><td>Adjustment</td><td class="right">${fmt(inv.adjustmentAmt)}</td></tr>`:''}${inv.tcs?`<tr><td>TCS</td><td class="right">${fmt(inv.tcs)}</td></tr>`:''}${inv.tds?`<tr><td>TDS</td><td class="right">-${fmt(inv.tds)}</td></tr>`:''}
+      <table style="margin-top:8px"><tr><td>Subtotal</td><td class="right">${fmt(inv.subtotal)}</td></tr>${inv.discount?`<tr><td>Discount (${inv.discountPercent||''}% gaming only)</td><td class="right">-${fmt(inv.discount)}</td></tr>`:''}${invBenefitRows(inv).map(([a,b])=>`<tr><td>${esc(a)}</td><td class="right">${esc(b)}</td></tr>`).join('')}${inv.tax?`<tr><td>${esc(inv.taxLabel||'Tax')}</td><td class="right">${fmt(inv.tax)}</td></tr>`:''}${inv.adjustmentAmt?`<tr><td>Adjustment</td><td class="right">${fmt(inv.adjustmentAmt)}</td></tr>`:''}${inv.tcs?`<tr><td>TCS</td><td class="right">${fmt(inv.tcs)}</td></tr>`:''}${inv.tds?`<tr><td>TDS</td><td class="right">-${fmt(inv.tds)}</td></tr>`:''}
       <tr class="total-row"><td>Grand total</td><td class="right">${fmt(inv.grandTotal)}</td></tr>
       ${(inv.adjustments||[]).filter(a=>a.type==='credit').map(a=>`<tr><td>Credit note — ${esc(a.reason||'')}</td><td class="right">-${fmt(a.amount)}</td></tr>`).join('')}
       ${(inv.payments||[]).map(p=>`<tr><td>${p.amount<0?'Refund':'Paid'} — ${esc(p.method)} <span class="muted" style="font-size:11px">${new Date(p.date).toLocaleDateString('en-IN')}</span></td><td class="right">${fmt(Math.abs(p.amount))}</td></tr>`).join('')}
@@ -2173,6 +2192,7 @@ async function confirmRecordPayment(id){
   inv.payments = inv.payments||[]; inv.payments.push({ method, amount:amt, date:Date.now() });
   inv.status = invoiceBalance(inv)<=0?'paid':'finalized'; inv.paymentMethod = [...new Set(inv.payments.map(p=>p.method))].join(' + ');
   await dbPut('invoices', inv); await creditAccount(method, amt); await syncSessionStatusForInvoice(inv);
+  try{ await loyaltyAward(inv); }catch(e){ console.error('loyalty award failed', e); }
   closeModal(); showToast('Payment recorded'); render();
 }
 function creditRefundModal(id){
@@ -2195,7 +2215,9 @@ async function confirmCreditRefund(id){
   inv.adjustments.push({ type, amount:amt, reason, date:Date.now(), by:isAdmin()?'Admin':'Staff' });
   if(type==='refund'){ inv.payments.push({ method, amount:-amt, date:Date.now(), type:'refund', reason }); await debitAccount(method, amt); }
   inv.status = invoiceBalance(inv)<=0?'paid':'finalized';
-  await dbPut('invoices', inv); await syncSessionStatusForInvoice(inv); closeModal(); showToast('Saved to the invoice audit trail'); render();
+  await dbPut('invoices', inv); await syncSessionStatusForInvoice(inv);
+  try{ await loyaltyReverseForCredit(inv, amt); }catch(e){ console.error('loyalty reversal failed', e); }
+  closeModal(); showToast('Saved to the invoice audit trail'); render();
 }
 let __invCache=[];
 function invRowsHtml(list){
@@ -2273,13 +2295,15 @@ async function deleteInvoiceCore(id, o){
   await step('customer totals', async()=>{ actions.customerAdjusted = await admAdjustCustomer(inv, -1); });
   await step('gaming session', async()=>{
     if(!inv.sessionId) return; const s = await dbGet('bsessions', inv.sessionId); if(!s || s.invoiceId!==inv.id) return;
-    const mode = o.sessionMode==='cancel' ? 'cancel' : 'reopen';
+    const mode = o.sessionMode==='cancel' ? 'cancel' : o.sessionMode==='delete' ? 'delete' : 'reopen';
+    if(mode==='delete'){ actions.session = await deleteSessionCascade(inv, s); return; }
     await dbUpdate('bsessions', inv.sessionId, d=>{
       d.invoiceId = null; d.deletedInvoiceNumber = inv.number; d.updatedAt = Date.now(); delete d.invoiceNumber; delete d.finalizedAt;
       if(mode==='reopen'){ d.status = 'ready'; } else { d.status = 'cancelled'; d.cancelReason = `Invoice ${inv.number} deleted by Admin`; d.cancelledAt = Date.now(); }
       return true; });
     updateLiveCache(await dbGet('bsessions', inv.sessionId)); actions.session = { id:s.id, mode, prevStatus:s.status };
   });
+  await step('loyalty & membership', async()=>{ actions.benefits = await benefitsReverse(inv); });
   await step('daily totals', async()=>{ await admAdjustDaily(inv, -1); });
   await dbDel('invoices', id);
   await dbPut('deletedInvoices', rec);   // final copy including what was adjusted
@@ -2307,6 +2331,7 @@ async function restoreInvoiceCore(id, o){
     await dbUpdate('bsessions', inv.sessionId, d=>{ d.invoiceId = inv.id; d.invoiceNumber = inv.number; d.finalizedAt = inv.date; d.status = invoiceBalance(inv)<=0 ? 'paid' : 'finalized'; delete d.deletedInvoiceNumber; delete d.cancelReason; delete d.cancelledAt; d.updatedAt = Date.now(); return true; });
     updateLiveCache(await dbGet('bsessions', inv.sessionId));
   });
+  await step('loyalty & membership', async()=>{ if(a.benefits) await benefitsReapply(inv, a.benefits); });
   await step('daily totals', async()=>{ await admAdjustDaily(inv, +1); });
   await dbDel('deletedInvoices', id);
   await admAudit('invoice_restore', inv, { warnings });
@@ -2397,7 +2422,7 @@ async function adminDeleteModal(ids){
 }
 async function confirmAdminDelete(){
   const g = id=>document.getElementById(id), ids = window.__admDelIds||[];
-  const o = { pin:g('adPin')?g('adPin').value:'', reason:'Deleted by admin', reverseAccounts:true, sessionMode:'reopen' };
+  const o = { pin:g('adPin')?g('adPin').value:'', reason:'Deleted by admin', reverseAccounts:true, sessionMode:'delete' };
   try{ await admAuthorize(o.pin); }catch(e){ tell(e.message); return; }
   const btn = g('adGo'); if(btn){ btn.disabled = true; btn.textContent = 'Deleting…'; }
   let done = 0; const fails = [];
@@ -2469,12 +2494,256 @@ function filterCustomers(q){
   if(el) el.innerHTML = custListHtml(filtered);
 }
 function openCustomer(mobile){ state.custProfile = mobile; go('customerProfile'); }
+/* ============================================================================
+   v12 — Loyalty points, Membership plans & free-hours wallet
+   Records live in two new stores: loyaltyTx (one row per points movement) and memberships (one per purchase,
+   with its own usage history). Balances are always DERIVED from the saved rows, so they can never drift.
+   ============================================================================ */
+const DEFAULT_LOYALTY = { enabled:true, spend:10, points:1, rupeePerPoint:1, minRedeem:0, maxRedeemPerInvoice:0, expiryDays:0 };
+const DEFAULT_PLANS = [
+  { id:'m_bronze',  name:'Bronze',   tier:'Bronze',   period:'Monthly', price:499,   durationMonths:1,  freeHours:0,   gamingDiscount:5,  foodDiscount:0,  birthdayHours:1, benefits:'Priority booking, 1 birthday gaming hour', active:true },
+  { id:'m_silver',  name:'Silver',   tier:'Silver',   period:'Monthly', price:999,   durationMonths:1,  freeHours:5,   gamingDiscount:10, foodDiscount:10, birthdayHours:2, benefits:'Priority booking, 10% snacks & beverages discount, 2 birthday gaming hours', active:true },
+  { id:'m_gold',    name:'Gold',     tier:'Gold',     period:'Monthly', price:1999,  durationMonths:1,  freeHours:12,  gamingDiscount:15, foodDiscount:15, birthdayHours:0, benefits:'Highest priority, 15% snacks & beverages discount, tournament entry, 1 friend free for 1 hour/month', active:true },
+  { id:'y_bronze',  name:'Bronze',   tier:'Bronze',   period:'Yearly',  price:4999,  durationMonths:12, freeHours:20,  gamingDiscount:5,  foodDiscount:0,  birthdayHours:2, benefits:'Priority booking, 2 birthday gaming hours', active:true },
+  { id:'y_silver',  name:'Silver',   tier:'Silver',   period:'Yearly',  price:8999,  durationMonths:12, freeHours:60,  gamingDiscount:10, foodDiscount:10, birthdayHours:0, benefits:'Priority booking, 10% snacks & beverages discount, exclusive offers', active:true },
+  { id:'y_platinum',name:'Platinum', tier:'Platinum', period:'Yearly',  price:14999, durationMonths:12, freeHours:150, gamingDiscount:15, foodDiscount:15, birthdayHours:4, benefits:'Highest priority, 15% snacks & beverages discount, 4 birthday gaming hours', active:true }
+];
+const MEM_RULES = ['Membership is non-transferable.','Free hours cannot be carried forward after expiry.','Discounts cannot be combined with other offers.','Members must show/identify their membership before every session.'];
+function loyaltyCfg(){ return Object.assign({}, DEFAULT_LOYALTY, (state.settings||{}).loyalty||{}); }
+function memPlans(){ const p=(state.settings||{}).membershipPlans; return Array.isArray(p)&&p.length ? p : DEFAULT_PLANS.map(x=>({...x})); }
+const rnd2 = v=>Math.round((Number(v)||0)*100)/100;
+const fdate = ts=>new Date(ts).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+const fdt = ts=>new Date(ts).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'});
+const fpts = v=>{ v=rnd2(v); return Number.isInteger(v)?String(v):v.toFixed(2); };
+function tierBadge(tier,extra){ const t=String(tier||''); return `<span class="tier tier-${esc(t.toLowerCase())}">${esc(t||'Member')}${extra?' · '+esc(extra):''}</span>`; }
+
+/* ---------- Loyalty ---------- */
+function loyaltyPointsFor(amount, cfg){ cfg=cfg||loyaltyCfg(); const sp=Number(cfg.spend)||0; if(!(sp>0)||!(amount>0)) return 0; return rnd2(Math.floor(amount/sp)*(Number(cfg.points)||0)); }
+function loyaltySummary(txs){
+  let earned=0, redeemed=0, expired=0, bal=0;
+  txs.forEach(t=>{ bal+=t.points; if(t.type==='earn'||t.type==='reverse_earn') earned+=t.points; else if(t.type==='redeem'||t.type==='reverse_redeem') redeemed-=t.points; else if(t.type==='expire') expired-=t.points; });
+  return { earned:rnd2(earned), redeemed:rnd2(redeemed), expired:rnd2(expired), balance:rnd2(bal) };
+}
+async function loyaltyTxs(mobile){ const a=await dbAll('loyaltyTx'); return (mobile?a.filter(t=>t.mobile===mobile):a).sort((x,y)=>x.ts-y.ts||(x.id-y.id)); }
+async function loyaltyExpireSweep(mobile){
+  const cfg=loyaltyCfg(); if(!cfg.enabled || !(Number(cfg.expiryDays)>0) || !mobile) return;
+  const txs=await loyaltyTxs(mobile), cutoff=Date.now()-cfg.expiryDays*864e5;
+  const oldEarn = txs.filter(t=>t.type==='earn'&&t.ts<cutoff).reduce((z,t)=>z+t.points,0);
+  const used = txs.filter(t=>t.type==='redeem'||t.type==='expire').reduce((z,t)=>z-t.points,0);
+  const due = Math.min(rnd2(oldEarn-used), loyaltySummary(txs).balance);
+  if(due>0) await loyaltyPost(mobile,'expire',-due,null,`Points older than ${cfg.expiryDays} days expired`);
+}
+async function loyaltyAccount(mobile){
+  const cfg=loyaltyCfg(); const txs=await loyaltyTxs(mobile); const s=loyaltySummary(txs);
+  return Object.assign(s,{ txs, cfg, value:rnd2(s.balance*cfg.rupeePerPoint), lifetimeValue:rnd2(s.earned*cfg.rupeePerPoint) });
+}
+async function loyaltyPost(mobile, type, points, inv, note){
+  const bal = loyaltySummary(await loyaltyTxs(mobile)).balance;
+  return createRecord('loyaltyTx', { ts:Date.now(), mobile, type, points:rnd2(points), invoiceId:inv?inv.id:null, invoiceNumber:inv?inv.number:'', balanceAfter:rnd2(bal+points), note:note||'' });
+}
+/* Points are earned only when a PAID invoice (nothing owing) is finalised, once per invoice. */
+async function loyaltyAward(inv){
+  const cfg=loyaltyCfg(); if(!cfg.enabled || !inv || !inv.customerMobile) return null;
+  if(invoiceBalance(inv)>0 || !(inv.grandTotal>0)) return null;
+  const txs=(await dbAll('loyaltyTx')).filter(t=>t.invoiceId===inv.id && (t.type==='earn'));
+  if(txs.length) return null;   // never twice
+  const pts=loyaltyPointsFor(inv.grandTotal-invoiceCredits(inv), cfg); if(!(pts>0)) return null;
+  return loyaltyPost(inv.customerMobile,'earn',pts,inv,`Earned on ${inv.number} (${fmt(inv.grandTotal)} spent)`);
+}
+async function loyaltyReverseForCredit(inv, amount){
+  if(!inv.customerMobile) return;
+  const mine=(await dbAll('loyaltyTx')).filter(t=>t.invoiceId===inv.id && (t.type==='earn'||t.type==='reverse_earn'));
+  const have=mine.reduce((z,t)=>z+t.points,0); if(!(have>0)) return;
+  const pts=Math.min(have, loyaltyPointsFor(amount)); if(pts>0) await loyaltyPost(inv.customerMobile,'reverse_earn',-pts,inv,`Credit/refund of ${fmt(amount)} on ${inv.number}`);
+}
+/* Invoice deletion: put every point and free minute back exactly as it was. Returns a snapshot so Restore can re-apply it. */
+async function benefitsReverse(inv){
+  const snap={ mobile:inv.customerMobile||'', earn:0, redeem:0, usage:[] };
+  if(inv.customerMobile){
+    const mine=(await dbAll('loyaltyTx')).filter(t=>t.invoiceId===inv.id);
+    snap.earn = rnd2(mine.filter(t=>t.type==='earn'||t.type==='reverse_earn').reduce((z,t)=>z+t.points,0));
+    snap.redeem = rnd2(-mine.filter(t=>t.type==='redeem'||t.type==='reverse_redeem').reduce((z,t)=>z+t.points,0));
+    if(snap.earn!==0) await loyaltyPost(inv.customerMobile,'reverse_earn',-snap.earn,inv,`Invoice ${inv.number} deleted`);
+    if(snap.redeem!==0) await loyaltyPost(inv.customerMobile,'reverse_redeem',snap.redeem,inv,`Invoice ${inv.number} deleted — points returned`);
+  }
+  for(const m of await dbAll('memberships')){
+    const hit=(m.usage||[]).filter(u=>u.invoiceId===inv.id && !u.reversed); if(!hit.length) continue;
+    hit.forEach(u=>{ u.reversed=true; u.reversedNote=`Invoice ${inv.number} deleted`; snap.usage.push({ mid:m.id, uid:u.id }); });
+    await dbPut('memberships', m);
+  }
+  return snap;
+}
+async function benefitsReapply(inv, snap){
+  if(snap.mobile && snap.earn>0) await loyaltyPost(snap.mobile,'earn',snap.earn,inv,`Invoice ${inv.number} restored`);
+  if(snap.mobile && snap.redeem>0) await loyaltyPost(snap.mobile,'redeem',-snap.redeem,inv,`Invoice ${inv.number} restored`);
+  for(const r of (snap.usage||[])){ const m=await dbGet('memberships',r.mid); const u=m&&(m.usage||[]).find(x=>x.id===r.uid); if(u){ delete u.reversed; delete u.reversedNote; await dbPut('memberships',m); } }
+}
+/* Full cascade: the session, its gaming segments / lines (stored inside it) and any other session that points at this invoice. Never touches other sessions of the same customer. */
+async function deleteSessionCascade(inv, s){
+  const ids=new Set([inv.sessionId]);
+  (await dbAll('bsessions')).forEach(x=>{ if(x.invoiceId===inv.id) ids.add(x.id); });
+  const gone=[];
+  for(const sid of ids){
+    const sess = sid===s.id ? s : await dbGet('bsessions', sid); if(!sess) continue;
+    if(sid!==s.id && sess.invoiceId!==inv.id) continue;
+    await dbDel('bsessions', sid); liveSessions = liveSessions.filter(x=>x.id!==sid);
+    gone.push({ id:sid, code:sesCode(sess), lines:(sess.lines||[]).length, prevStatus:sess.status });
+  }
+  if(state.sessionId && ids.has(state.sessionId)) state.sessionId=null;
+  return { mode:'delete', removed:gone };
+}
+function invBenefitRows(inv){
+  const r=[]; const m=inv.membership;
+  if(inv.memFree) r.push([`Membership free hours (${fmtDur(m&&m.freeMinutes||0)})`,'-'+fmt(inv.memFree)]);
+  if(inv.memDisc) r.push([`Member gaming discount${m&&m.gamingDiscount?' ('+m.gamingDiscount+'%)':''}`,'-'+fmt(inv.memDisc)]);
+  if(inv.memFood) r.push([`Member snacks & drinks discount${m&&m.foodDiscount?' ('+m.foodDiscount+'%)':''}`,'-'+fmt(inv.memFood)]);
+  if(inv.loyaltyValue) r.push([`Loyalty points redeemed (${fpts(inv.loyaltyPoints||0)})`,'-'+fmt(inv.loyaltyValue)]);
+  return r;
+}
+
+/* ---------- Membership ---------- */
+function addMonths(ts,n){ const d=new Date(ts), day=d.getDate(); d.setMonth(d.getMonth()+n); if(d.getDate()!==day) d.setDate(0); return d.getTime(); }
+function endOfDay(ts){ const d=new Date(ts); d.setHours(23,59,59,999); return d.getTime(); }
+function memStatus(m, now){ now=now||Date.now(); if(m.cancelledAt) return 'Cancelled'; if(now>m.expiryDate) return 'Expired'; return 'Active'; }
+function memUsedMin(m){ return (m.usage||[]).filter(u=>!u.reversed).reduce((z,u)=>z+(Number(u.minutes)||0),0); }
+function memRemainMin(m){ return Math.max(0, Math.round((Number(m.freeHours)||0)*60) - memUsedMin(m)); }
+function memHours(min){ return rnd2(min/60)+'h'; }
+async function activeMembership(mobile){ if(!mobile) return null; return (await dbAll('memberships')).filter(m=>m.mobile===mobile && memStatus(m)==='Active').sort((a,b)=>b.startDate-a.startDate)[0]||null; }
+async function membershipPurchase(o){
+  if(!isAdmin()) throw new Error('Only an administrator can sell or assign a membership.');
+  const c = await dbGet('customers', o.mobile); if(!c) throw new Error('Choose an existing customer. Create the customer first (a session with their mobile number, or via Customers).');
+  const plan = memPlans().find(p=>p.id===o.planId); if(!plan) throw new Error('Choose a membership plan.');
+  if(!PAY_METHODS.includes(o.method)) throw new Error('Choose how the membership was paid.');
+  const cur = await activeMembership(o.mobile); if(cur) throw new Error(`${c.name} already has an active ${cur.period} ${cur.planName} membership (valid till ${fdate(cur.expiryDate)}). Cancel it first or wait until it expires.`);
+  const n = await dbIncrement('settings','main','nextMembershipNo'); const receiptNo = 'LVL-MEM-'+String(n).padStart(6,'0');
+  const start = Date.now(), months = Math.max(1, Math.round(Number(plan.durationMonths)||1));
+  const rec = { mobile:o.mobile, customerName:c.name, planId:plan.id, planName:plan.name, tier:plan.tier||plan.name, period:plan.period||'', durationMonths:months, price:Math.round(Number(plan.price)||0),
+    freeHours:Number(plan.freeHours)||0, gamingDiscount:Number(plan.gamingDiscount)||0, foodDiscount:Number(plan.foodDiscount)||0, birthdayHours:Number(plan.birthdayHours)||0, benefits:plan.benefits||'',
+    startDate:start, expiryDate:endOfDay(addMonths(start,months)-864e5), payment:{ method:o.method, amount:Math.round(Number(plan.price)||0), date:start }, receiptNo, usage:[], createdAt:start, createdBy:'Admin' };
+  await createRecord('memberships', rec);
+  try{ await creditAccount(o.method, rec.payment.amount); }catch(e){ console.error('membership payment not posted to account', e); }
+  return rec;
+}
+async function membershipCancel(id, reason){
+  if(!needAdmin()) return; const m=await dbGet('memberships',id); if(!m) return;
+  m.cancelledAt=Date.now(); m.cancelReason=reason||''; await dbPut('memberships',m);
+}
+/* THE benefit calculation — one pure function used by the checkout screen and by the invoice engine, so they can never disagree.
+   f: { discountPct, memOn, memOwner:{lineId:true}, redeemPts }.  Free hours are measured in the OWNER's own minutes:
+   a group line's player count never multiplies the deduction, and only the owner's per-player share of the price is made free. */
+function benefitPlan(lines, f, settings, mem, acct, fin){
+  const memOn = !!(f.memOn===true && mem && memStatus(mem)==='Active');
+  let remain = memOn ? memRemainMin(mem) : 0; const items=[]; let memFree=0, memDisc=0, freeMin=0;
+  if(memOn) lines.filter(l=>l.kind==='gaming' && f.memOwner && f.memOwner[l.id]).forEach(l=>{
+    const mins=Number(l.minutes)||0, players=Math.max(1,Number(l.players)||1), share=(Number(l.total)||0)/players;
+    const fm=Math.min(mins, remain); remain-=fm; const fv=mins>0 ? Math.round(share*fm/mins) : 0;
+    const paidShare=Math.max(0, share-fv), disc=Math.round(paidShare*(Number(mem.gamingDiscount)||0)/100);
+    freeMin+=fm; memFree+=fv; memDisc+=disc; items.push({ lineId:l.id, name:l.name, minutes:mins, players, freeMin:fm, paidMin:mins-fm, freeValue:fv, discount:disc, share:Math.round(share) });
+  });
+  const foodTotal = lines.filter(l=>l.bucket==='food').reduce((z,l)=>z+(Number(l.total)||0),0);
+  const memFood = memOn ? Math.round(foodTotal*(Number(mem.foodDiscount)||0)/100) : 0;
+  const pct = memOn ? 0 : (Number(f.discountPct)||0);   // no stacking: the manual discount is off while membership benefits apply
+  const base = Object.assign({}, fin||{}, { memFree, memDisc, memFood });
+  let t = billTotals(lines, pct, settings, base), lpts=0, lval=0; const cfg=loyaltyCfg();
+  const want = Math.floor(Number(f.redeemPts)||0);
+  if(cfg.enabled && acct && want>0 && cfg.rupeePerPoint>0){
+    const rate=Number(cfg.rupeePerPoint); let lim=Math.min(want, Math.floor(acct.balance), Math.floor(Math.max(0,t.grand)/rate));
+    if(cfg.maxRedeemPerInvoice>0) lim=Math.min(lim, Math.floor(cfg.maxRedeemPerInvoice/rate));
+    if(acct.balance < (Number(cfg.minRedeem)||0)) lim=0;
+    if(lim>0){ lpts=lim; lval=Math.round(lim*rate); t=billTotals(lines, pct, settings, Object.assign({}, base, { loyalty:lval })); }
+  }
+  return { t, memOn, mem:memOn?mem:null, items, freeMin, memFree, memDisc, memFood, loyaltyPts:lpts, loyaltyValue:lval };
+}
+/* Called by the invoice engine right after the invoice exists. */
+async function applyBenefitsToInvoice(inv, plan, mobile){
+  if(plan.memOn && plan.mem && plan.freeMin>0){
+    const m=await dbGet('memberships', plan.mem.id);
+    if(m){ m.usage=m.usage||[]; m.usage.push({ id:Date.now()+'-'+m.usage.length, ts:Date.now(), invoiceId:inv.id, invoiceNumber:inv.number, minutes:plan.freeMin, lines:plan.items.filter(i=>i.freeMin>0).map(i=>({ lineId:i.lineId, name:i.name, minutes:i.freeMin, players:i.players })), note:'Free gaming hours used (owner\'s own time only)' }); await dbPut('memberships', m); }
+  }
+  if(mobile && plan.loyaltyPts>0) await loyaltyPost(mobile,'redeem',-plan.loyaltyPts,inv,`Redeemed on ${inv.number} (${fmt(plan.loyaltyValue)} off)`);
+  await loyaltyAward(inv);
+}
+
+/* ---------- Checkout panel ---------- */
+async function ckBenRefresh(){
+  const f=state.ckForm; if(!f) return; const mob=normMobile((f.mobile||'').trim());
+  let mem=null, acct=null;
+  if(mob){ try{ await loyaltyExpireSweep(mob); }catch(e){} mem=await activeMembership(mob); acct=await loyaltyAccount(mob); }
+  state.ckBen={ mobile:mob, mem, acct };
+  if(f.memOn===undefined) f.memOn=true;
+  const gl=(state.ckSession&&state.ckSession.lines||[]).filter(l=>l.kind==='gaming');
+  if(!f.memOwner || mem && f.memOwnerFor!==mem.id){ f.memOwner={}; if(gl[0]) f.memOwner[gl[0].id]=true; f.memOwnerFor=mem?mem.id:null; }
+  if(!acct || !(acct.balance>0)) f.redeemPts=0;
+  const box=document.getElementById('ckBenBox'); if(box) box.innerHTML=ckBenHtml();
+  const d=document.getElementById('ckDiscIn'); if(d){ const on=!!(mem&&f.memOn); d.disabled=on||!can('discount'); const n=document.getElementById('ckDiscNote'); if(n) n.textContent=on?'Not combined with membership benefits.':''; }
+  ckRefresh();
+}
+function ckPlan(){
+  const f=state.ckForm, s=state.ckSession, b=state.ckBen||{};
+  return benefitPlan(s.lines, f, state.settings, b.mem, b.acct, finOf(s));
+}
+function ckBenHtml(){
+  const f=state.ckForm, s=state.ckSession, b=state.ckBen||{}; if(!f||!s) return '';
+  if(!b.mobile) return `<div class="muted" style="font-size:12px">Enter the customer's 10-digit mobile above to apply their membership and loyalty points.</div>`;
+  const p=ckPlan(), m=b.mem, a=b.acct, cfg=loyaltyCfg(); let h='';
+  if(m){
+    const gl=s.lines.filter(l=>l.kind==='gaming');
+    h+=`<div class="membox"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><span>${tierBadge(m.tier,m.period)} <b>${esc(m.planName)}</b></span><span class="pill green">Active</span></div>
+      <div class="muted" style="font-size:12px;margin-top:4px">Valid till ${fdate(m.expiryDate)} · Free hours left <b>${memHours(memRemainMin(m))}</b> of ${rnd2(m.freeHours)}h · Gaming ${m.gamingDiscount}% off · Snacks &amp; drinks ${m.foodDiscount}% off</div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" style="width:auto" ${f.memOn===true?'checked':''} onchange="ckMemToggle(this.checked)"> Apply membership benefits to this bill</label>
+      ${f.memOn===true?`<div class="muted" style="font-size:12px;margin-top:6px">Which gaming line is the member playing on? Only the member's own time is taken from their free hours.</div>
+      ${gl.map(l=>`<label class="memline"><input type="checkbox" style="width:auto" ${f.memOwner&&f.memOwner[l.id]?'checked':''} onchange="ckMemOwner(${l.id},this.checked)"><span>${esc(gamingTitle(l))} · ${fmtDur(l.minutes)}${(l.players||1)>1?` · ${l.players} players`:''}</span></label>`).join('')||'<div class="muted" style="font-size:12px">No gaming line on this bill.</div>'}
+      ${p.items.map(i=>`<div class="muted" style="font-size:12px;margin-top:4px">${esc(i.name)}: <b>${fmtDur(i.freeMin)} free</b> (member's own time${i.players>1?', not × '+i.players+' players':''}) · ${i.paidMin?fmtDur(i.paidMin)+' paid (−'+m.gamingDiscount+'%)':'no paid time'} · other players ${fmt(i.share*(i.players-1))} billed normally</div>`).join('')}`:''}
+      <div class="muted" style="font-size:11px;margin-top:8px">${MEM_RULES.join(' · ')}</div></div>`;
+  } else h+=`<div class="muted" style="font-size:12px;margin-bottom:6px">No active membership for this mobile number.</div>`;
+  if(cfg.enabled){
+    h+=`<div class="membox" style="margin-top:8px"><b>Loyalty points</b>: ${fpts(a?a.balance:0)} pts <span class="muted">(worth ${fmt(a?a.value:0)})</span>`;
+    if(a && a.balance>0 && a.balance>=(Number(cfg.minRedeem)||0)){
+      h+=`<div class="grid2" style="margin-top:6px;align-items:end"><div><label>Redeem points</label><input id="ckRedeem" type="number" inputmode="numeric" min="0" max="${Math.floor(a.balance)}" value="${f.redeemPts||''}" placeholder="0" oninput="ckRedeemSet(this.value)"></div><button type="button" class="btn sm" onclick="ckRedeemMax()">Use maximum</button></div><div class="muted" style="font-size:12px;margin-top:4px" id="ckRedeemNote">${ckRedeemNote()}</div>`;
+    } else if(a && a.balance>0) h+=`<div class="muted" style="font-size:12px">Needs at least ${fpts(cfg.minRedeem)} points to redeem.</div>`;
+    h+=`<div class="muted" style="font-size:11px;margin-top:4px">${cfg.spend>0?`Earn ${fpts(cfg.points)} point per ${fmt(cfg.spend)} on fully paid invoices. `:''}Points are deducted only when the invoice is finalised.</div></div>`;
+  }
+  return h;
+}
+function ckRedeemNote(){ const p=ckPlan(), f=state.ckForm; return p.loyaltyPts>0 ? `Redeeming ${fpts(p.loyaltyPts)} pts = ${fmt(p.loyaltyValue)} off${p.loyaltyPts<(Number(f.redeemPts)||0)?' (limited by balance, invoice total or the per-invoice maximum)':''}` : ((Number(f.redeemPts)||0)>0?'Nothing can be redeemed on this bill.':''); }
+function ckMemToggle(on){ state.ckForm.memOn=on; ckBenRefresh(); }
+function ckMemOwner(lid,on){ const f=state.ckForm; f.memOwner=f.memOwner||{}; if(on) f.memOwner[lid]=true; else delete f.memOwner[lid]; ckBenRefresh(); }
+function ckRedeemSet(v){ state.ckForm.redeemPts=Math.max(0,Math.floor(Number(v)||0)); const n=document.getElementById('ckRedeemNote'); if(n) n.textContent=ckRedeemNote(); ckRefresh(); }
+function ckRedeemMax(){ const b=state.ckBen||{}; if(!b.acct) return; state.ckForm.redeemPts=Math.floor(b.acct.balance); const e=document.getElementById('ckRedeem'); if(e) e.value=state.ckForm.redeemPts; ckRedeemSet(state.ckForm.redeemPts); const p=ckPlan(); if(e) e.value=p.loyaltyPts||''; state.ckForm.redeemPts=p.loyaltyPts; }
+
+/* ---------- Customer profile ---------- */
 async function screenCustomerProfile(){
   const c = await dbGet('customers', state.custProfile);
   if(!c) return `<div class="empty">Customer not found.</div>`;
   const invoices = []; for(const id of c.invoiceIds){ const inv = await dbGet('invoices', id); if(inv) invoices.push(inv); }
+  await loyaltyExpireSweep(c.mobile).catch(()=>{});
+  const acct = await loyaltyAccount(c.mobile), cfg=acct.cfg;
+  const mems = (await dbAll('memberships')).filter(m=>m.mobile===c.mobile).sort((a,b)=>b.startDate-a.startDate);
+  const cur = mems.find(m=>memStatus(m)==='Active');
+  const memSpend = mems.reduce((z,m)=>z+(m.payment?m.payment.amount:0),0);
+  const usage = mems.flatMap(m=>(m.usage||[]).map(u=>({ ...u, plan:m.planName, period:m.period }))).sort((a,b)=>b.ts-a.ts);
+  const memHtml = `<div class="section-title">Membership ${cur?tierBadge(cur.tier,cur.period):''}</div><div class="card">
+    ${cur?`<div class="grid2">
+      <div class="stat"><div class="v">${esc(cur.planName)}</div><div class="l">${esc(cur.period)} plan</div></div>
+      <div class="stat"><div class="v">${memHours(memRemainMin(cur))}</div><div class="l">Free hours left of ${rnd2(cur.freeHours)}h</div></div>
+      <div class="stat"><div class="v">${fdate(cur.startDate)}</div><div class="l">Activated</div></div>
+      <div class="stat"><div class="v">${fdate(cur.expiryDate)}</div><div class="l">Expires</div></div></div>
+      <div class="muted" style="font-size:12px;margin-top:6px">Used ${memHours(memUsedMin(cur))} · Gaming ${cur.gamingDiscount}% off · Snacks &amp; drinks ${cur.foodDiscount}% off · ${esc(cur.benefits)}</div>`
+      : '<div class="muted">No active membership.</div>'}
+    <div class="muted" style="font-size:12px;margin-top:6px">Total membership spending: <b>${fmt(memSpend)}</b></div>
+    ${isAdmin()?`<button class="btn sm primary" style="margin-top:8px" onclick="membershipSellModal('${c.mobile}')">${cur?'Membership active':'Assign / sell membership'}</button>${cur?` <button class="btn sm" onclick="membershipCancelModal(${cur.id})">Cancel membership</button>`:''}`:''}
+    ${mems.length?`<div class="muted" style="font-size:11px;margin-top:10px;text-transform:uppercase">Membership history</div>`+mems.map(m=>`<div class="list-item" onclick="membershipReceipt(${m.id})" style="cursor:pointer"><span>${tierBadge(m.tier)} ${esc(m.period)} ${esc(m.planName)}<br><span class="muted" style="font-size:12px">${fdate(m.startDate)} → ${fdate(m.expiryDate)} · ${esc(m.receiptNo)}</span></span><span style="text-align:right"><b>${fmt(m.payment?m.payment.amount:0)}</b><br><span class="pill ${memStatus(m)==='Active'?'green':'amber'}">${memStatus(m)}</span></span></div>`).join(''):''}
+    ${usage.length?`<div class="muted" style="font-size:11px;margin-top:10px;text-transform:uppercase">Free hours usage</div>`+usage.map(u=>`<div class="list-item"><span${u.reversed?' style="text-decoration:line-through;opacity:.6"':''}>${esc(u.invoiceNumber||'')} · ${esc(u.plan)}<br><span class="muted" style="font-size:12px">${fdt(u.ts)}${u.reversed?' · reversed':''}</span></span><b>−${fmtDur(u.minutes)}</b></div>`).join(''):''}</div>`;
+  const loyHtml = `<div class="section-title">Loyalty points ${cfg.enabled?'':'<span class="pill amber">programme off</span>'}</div><div class="card"><div class="grid2">
+      <div class="stat"><div class="v">${fpts(acct.balance)}</div><div class="l">Available points</div></div>
+      <div class="stat"><div class="v">${fmt(acct.value)}</div><div class="l">Redeemable value</div></div>
+      <div class="stat"><div class="v">${fpts(acct.earned)}</div><div class="l">Lifetime earned</div></div>
+      <div class="stat"><div class="v">${fpts(acct.redeemed)}</div><div class="l">Points redeemed</div></div></div>
+    <div class="muted" style="font-size:12px;margin-top:6px">Total loyalty value earned: <b>${fmt(acct.lifetimeValue)}</b> · Redeemed value ${fmt(acct.redeemed*cfg.rupeePerPoint)}</div>
+    ${acct.txs.length?`<div class="muted" style="font-size:11px;margin-top:10px;text-transform:uppercase">Loyalty transactions</div>`+acct.txs.slice().reverse().slice(0,50).map(t=>`<div class="list-item"><span>${esc(t.invoiceNumber||'—')} · ${esc(t.type.replace('_',' '))}<br><span class="muted" style="font-size:12px">${fdt(t.ts)} · ${esc(t.note||'')}</span></span><span style="text-align:right"><b style="color:${t.points>=0?'var(--ok,#4fb286)':'var(--amber)'}">${t.points>0?'+':''}${fpts(t.points)}</b><br><span class="muted" style="font-size:11px">Balance ${fpts(t.balanceAfter)}</span></span></div>`).join(''):'<div class="muted" style="margin-top:6px">No loyalty activity yet.</div>'}</div>`;
   return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('customers')">← Back</button>
-  <h2>${c.name}</h2>
+  <h2>${esc(c.name)} ${cur?tierBadge(cur.tier):''}</h2>
+  <div class="muted" style="margin:-6px 0 8px">${fmtMobile(c.mobile)}</div>
   <div class="card"><div class="grid2">
       <div class="stat"><div class="v">${c.visits}</div><div class="l">Visits</div></div>
       <div class="stat"><div class="v">${c.gamingHours.toFixed(1)}h</div><div class="l">Gaming Hours</div></div>
@@ -2483,8 +2752,157 @@ async function screenCustomerProfile(){
       <div class="stat"><div class="v">${fmt(c.totalSpend)}</div><div class="l">Total Spend</div></div>
       <div class="stat"><div class="v">${new Date(c.lastVisit).toLocaleDateString('en-IN')}</div><div class="l">Last Visit</div></div>
   </div></div>
+  ${memHtml}${loyHtml}
   <div class="section-title">Invoice History</div>
   ${invoices.map(i=>`<div class="list-item"><span>${i.number}</span><span>${fmt(i.grandTotal)}</span></div>`).join('') || '<div class="muted">No invoices.</div>'}`;
+}
+
+/* ---------- Membership screen: members, plans, sell ---------- */
+async function screenMembership(){
+  const A = state.mem = state.mem || { tab:'members', q:'' };
+  const all = (await dbAll('memberships')).sort((a,b)=>b.startDate-a.startDate);
+  const tabs=[['members','Members'],['plans','Plans & settings']].map(([k,l])=>`<span class="chip ${A.tab===k?'sel':''}" onclick="state.mem.tab='${k}';render()">${l}</span>`).join('');
+  let body='';
+  if(A.tab==='plans'){
+    const rows=memPlans().map(p=>`<div class="card" style="cursor:pointer" onclick="${isAdmin()?`membershipPlanModal('${p.id}')`:`tell('Only an administrator can edit plans.')`}"><div class="list-item"><span>${tierBadge(p.tier,p.period)} <b>${esc(p.name)}</b> ${p.active===false?'<span class="pill amber">off</span>':''}<br><span class="muted" style="font-size:12px">${p.freeHours?rnd2(p.freeHours)+'h free · ':''}${p.gamingDiscount}% gaming${p.foodDiscount?` · ${p.foodDiscount}% snacks`:''} · ${p.durationMonths} month${p.durationMonths>1?'s':''}</span></span><b>${fmt(p.price)}</b></div><div class="muted" style="font-size:12px">${esc(p.benefits||'')}</div></div>`).join('');
+    body=`${isAdmin()?`<button class="btn primary" style="margin-bottom:8px" onclick="membershipPlanModal('')">+ New plan</button>`:''}${rows}<div class="card"><b>Rules</b><div class="muted" style="font-size:12px;margin-top:4px">${MEM_RULES.map(r=>'• '+r).join('<br>')}</div></div>`;
+  } else {
+    const q=(A.q||'').toLowerCase(); const list=all.filter(m=>!q||(m.customerName+' '+m.mobile+' '+m.planName+' '+m.receiptNo).toLowerCase().includes(q));
+    const act=all.filter(m=>memStatus(m)==='Active').length;
+    body=`${isAdmin()?`<button class="btn primary" style="margin-bottom:8px" onclick="membershipSellModal('')">Sell / assign membership</button>`:''}
+      <div class="card"><div class="grid2"><div class="stat"><div class="v">${act}</div><div class="l">Active members</div></div><div class="stat"><div class="v">${all.length-act}</div><div class="l">Expired / cancelled</div></div></div></div>
+      <input id="memQ" placeholder="Search name, mobile, plan or receipt" value="${esc(A.q)}" oninput="state.mem.q=this.value;render()" style="margin-bottom:8px">
+      ${list.map(m=>`<div class="card" style="cursor:pointer" onclick="state.custProfile='${m.mobile}';go('customerProfile')"><div class="list-item"><span>${tierBadge(m.tier,m.period)} <b>${esc(m.customerName)}</b><br><span class="muted" style="font-size:12px">${fmtMobile(m.mobile)} · till ${fdate(m.expiryDate)} · ${memHours(memRemainMin(m))} of ${rnd2(m.freeHours)}h left</span></span><span style="text-align:right"><span class="pill ${memStatus(m)==='Active'?'green':'amber'}">${memStatus(m)}</span><br><span class="muted" style="font-size:11px">${esc(m.receiptNo)}</span></span></div></div>`).join('')||'<div class="empty">No memberships yet.</div>'}`;
+  }
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('more')">← Back</button><h2>Membership</h2><div style="margin-bottom:8px">${tabs}</div>${body}`;
+}
+function membershipPlanModal(id){
+  if(!needAdmin()) return; const p = memPlans().find(x=>x.id===id) || { id:'', name:'', tier:'Bronze', period:'Monthly', price:0, durationMonths:1, freeHours:0, gamingDiscount:0, foodDiscount:0, birthdayHours:0, benefits:'', active:true };
+  const f=(k,l,t,extra)=>`<div><label>${l}</label><input id="pl_${k}" ${t||''} value="${esc(p[k])}" ${extra||''}></div>`;
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>${id?'Edit plan':'New plan'}</h3>
+    <div class="grid2">${f('name','Plan name')}<div><label>Badge</label><select id="pl_tier">${['Bronze','Silver','Gold','Platinum'].map(t=>`<option ${p.tier===t?'selected':''}>${t}</option>`).join('')}</select></div></div>
+    <div class="grid2"><div><label>Billing</label><select id="pl_period">${['Monthly','Yearly','Custom'].map(t=>`<option ${p.period===t?'selected':''}>${t}</option>`).join('')}</select></div>${f('durationMonths','Duration (months)','type="number" inputmode="numeric"')}</div>
+    <div class="grid2">${f('price','Price (₹)','type="number" inputmode="decimal"')}${f('freeHours','Free gaming hours','type="number" inputmode="decimal"')}</div>
+    <div class="grid2">${f('gamingDiscount','Gaming discount %','type="number" inputmode="decimal"')}${f('foodDiscount','Snacks & drinks discount %','type="number" inputmode="decimal"')}</div>
+    ${f('birthdayHours','Birthday gaming hours','type="number" inputmode="decimal"')}
+    <label>Other benefits</label><textarea id="pl_benefits" rows="3">${esc(p.benefits)}</textarea>
+    <label style="display:flex;gap:8px;align-items:center"><input id="pl_active" type="checkbox" style="width:auto" ${p.active!==false?'checked':''}> Available for sale</label>
+    <button class="btn primary" style="margin-top:10px" onclick="membershipPlanSave('${id}')">Save plan</button>`);
+}
+async function membershipPlanSave(id){
+  if(!needAdmin()) return; const g=k=>document.getElementById('pl_'+k); const num=k=>Math.max(0,Number(g(k).value)||0);
+  const name=g('name').value.trim(); if(!name){ tell('Enter a plan name.'); return; }
+  const d=Math.max(1,Math.round(num('durationMonths'))); const gd=Math.min(100,num('gamingDiscount')), fd=Math.min(100,num('foodDiscount'));
+  const rec={ id:id||('p_'+Date.now().toString(36)), name, tier:g('tier').value, period:g('period').value, price:Math.round(num('price')), durationMonths:d, freeHours:num('freeHours'), gamingDiscount:gd, foodDiscount:fd, birthdayHours:num('birthdayHours'), benefits:g('benefits').value.trim(), active:g('active').checked };
+  const plans=memPlans().map(p=>({...p})); const i=plans.findIndex(p=>p.id===rec.id); if(i>=0) plans[i]=rec; else plans.push(rec);
+  await patchSettings({ membershipPlans:plans }); closeModal(); showToast('Plan saved'); render();
+}
+function membershipSellModal(mobile){
+  if(!needAdmin()) return;
+  const plans=memPlans().filter(p=>p.active!==false);
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Sell / assign membership</h3>
+    <p class="muted" style="font-size:12px">For an existing customer. Non-transferable — the plan and free hours belong to this customer only.</p>
+    <label>Customer name</label><input id="msName" placeholder="Start typing a saved customer" autocomplete="off">
+    <label>Mobile number</label><input id="msMobile" inputmode="numeric" placeholder="10-digit mobile" value="${esc(mobile||'')}" autocomplete="off">
+    <div id="msNote" style="font-size:12px;margin-top:4px"></div>
+    <label>Plan</label><select id="msPlan" onchange="membershipSellInfo()">${plans.map(p=>`<option value="${p.id}">${esc(p.period)} ${esc(p.name)} — ${fmt(p.price)}</option>`).join('')}</select>
+    <div class="muted" style="font-size:12px;margin:4px 0" id="msInfo"></div>
+    <label>Payment received by</label><select id="msPay">${PAY_METHODS.map(m=>`<option>${m}</option>`).join('')}</select>
+    <button class="btn primary" style="margin-top:10px" id="msGo" onclick="membershipSellConfirm()">Record payment &amp; activate</button>`);
+  const fill=c=>{ document.getElementById('msName').value=c.name; document.getElementById('msMobile').value=c.mobile; membershipSellInfo(); };
+  attachCustomerSuggest(document.getElementById('msName'),'name',fill); attachCustomerSuggest(document.getElementById('msMobile'),'mobile',fill);
+  document.getElementById('msMobile').addEventListener('input',membershipSellInfo);
+  if(mobile) dbGet('customers',mobile).then(c=>{ if(c) fill(c); }); else membershipSellInfo();
+}
+async function membershipSellInfo(){
+  const mob=normMobile(document.getElementById('msMobile').value.trim()), p=memPlans().find(x=>x.id===document.getElementById('msPlan').value);
+  const i=document.getElementById('msInfo'); if(i&&p) i.textContent=`${p.freeHours?rnd2(p.freeHours)+' free hours · ':''}${p.gamingDiscount}% gaming${p.foodDiscount?` · ${p.foodDiscount}% snacks & drinks`:''} · valid ${p.durationMonths} month${p.durationMonths>1?'s':''}. ${p.benefits||''}`;
+  const n=document.getElementById('msNote'); if(!n) return;
+  if(!mob){ n.innerHTML=''; return; }
+  const c=await dbGet('customers',mob); const cur=c?await activeMembership(mob):null;
+  n.innerHTML = !c ? '<span class="pill red">Not a saved customer</span>' : cur ? `<span class="pill amber">Already has an active ${esc(cur.planName)} membership till ${fdate(cur.expiryDate)}</span>` : `<span class="pill green">${esc(c.name)} ✓</span>`;
+}
+async function membershipSellConfirm(){
+  const btn=document.getElementById('msGo'); if(btn.disabled) return; btn.disabled=true;
+  try{
+    const mob=normMobile(document.getElementById('msMobile').value.trim()); if(!mob){ tell('Enter the customer\'s 10-digit mobile number.'); return; }
+    const rec=await membershipPurchase({ mobile:mob, planId:document.getElementById('msPlan').value, method:document.getElementById('msPay').value });
+    closeModal(); showToast('Membership activated'); membershipReceipt(rec.id); render();
+  }catch(e){ tell(e.message||String(e)); } finally{ btn.disabled=false; }
+}
+async function membershipReceipt(id){
+  const m=await dbGet('memberships',id); if(!m) return; const st=state.settings;
+  const text=`*${st.businessName||'LVL Gaming Café'}* — Membership receipt ${m.receiptNo}\n${m.customerName} (${m.mobile})\n${m.period} ${m.planName}: ${fmt(m.payment.amount)} paid by ${m.payment.method}\nValid ${fdate(m.startDate)} to ${fdate(m.expiryDate)}\nFree hours: ${rnd2(m.freeHours)}h · Gaming ${m.gamingDiscount}% off`;
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Membership receipt</h3>
+    <div class="card" style="text-align:left"><b>${esc(st.businessName||'')}</b><div class="muted" style="font-size:12px">Receipt ${esc(m.receiptNo)} · ${fdt(m.payment.date)}</div>
+    <table style="margin-top:8px"><tr><td>Customer</td><td class="right">${esc(m.customerName)}<br>${fmtMobile(m.mobile)}</td></tr><tr><td>Plan</td><td class="right">${tierBadge(m.tier,m.period)} ${esc(m.planName)}</td></tr>
+    <tr><td>Activated</td><td class="right">${fdate(m.startDate)}</td></tr><tr><td>Expires</td><td class="right">${fdate(m.expiryDate)}</td></tr>
+    <tr><td>Free hours</td><td class="right">${rnd2(m.freeHours)}h</td></tr><tr><td>Gaming / snacks discount</td><td class="right">${m.gamingDiscount}% / ${m.foodDiscount}%</td></tr>
+    <tr><td>Paid by</td><td class="right">${esc(m.payment.method)}</td></tr><tr class="total-row"><td>Amount paid</td><td class="right">${fmt(m.payment.amount)}</td></tr></table>
+    <div class="muted" style="font-size:12px;margin-top:6px">${esc(m.benefits||'')}</div><div class="muted" style="font-size:11px;margin-top:6px">${MEM_RULES.join(' ')}</div></div>
+    <a class="btn" style="display:block;text-align:center;margin-top:8px" target="_blank" rel="noopener" href="https://wa.me/91${m.mobile}?text=${encodeURIComponent(text)}">Send on WhatsApp</a>`);
+}
+function membershipCancelModal(id){ if(!needAdmin()) return;
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Cancel membership?</h3><p class="muted" style="font-size:13px">Remaining free hours and discounts stop immediately. The payment is not refunded automatically.</p><label>Reason</label><input id="mcReason" placeholder="Optional"><button class="btn danger" style="margin-top:10px" onclick="membershipCancelDo(${id})">Cancel membership</button>`); }
+async function membershipCancelDo(id){ await membershipCancel(id, document.getElementById('mcReason').value.trim()); closeModal(); showToast('Membership cancelled'); render(); }
+
+/* ---------- Loyalty screen: settings, top customers, transactions ---------- */
+async function screenLoyalty(){
+  const cfg=loyaltyCfg(), ro=isAdmin()?'':'disabled';
+  const txs=await loyaltyTxs(); const sum=loyaltySummary(txs);
+  const byC={}; txs.forEach(t=>{ (byC[t.mobile]=byC[t.mobile]||[]).push(t); });
+  const custs={}; (await dbAll('customers')).forEach(c=>custs[c.mobile]=c);
+  const top=Object.entries(byC).map(([m,l])=>({ m, name:(custs[m]||{}).name||m, ...loyaltySummary(l) })).sort((a,b)=>b.earned-a.earned).slice(0,10);
+  const F=(k,l,t)=>`<div><label>${l}</label><input id="lc_${k}" type="number" inputmode="decimal" min="0" ${ro} value="${cfg[k]}"></div>`;
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('more')">← Back</button><h2>Loyalty</h2>
+  <div class="card"><div class="grid2"><div class="stat"><div class="v">${fpts(sum.earned)}</div><div class="l">Points issued</div></div><div class="stat"><div class="v">${fpts(sum.redeemed)}</div><div class="l">Points redeemed</div></div>
+    <div class="stat"><div class="v">${fpts(sum.balance)}</div><div class="l">Outstanding points</div></div><div class="stat"><div class="v">${fmt(sum.balance*cfg.rupeePerPoint)}</div><div class="l">Liability value</div></div></div>
+    <button class="btn sm" style="margin-top:8px" onclick="go('lmReports')">Date-range reports</button></div>
+  <div class="section-title">Loyalty settings ${isAdmin()?'':'<span class="muted">(admin only)</span>'}</div><div class="card">
+    <label style="display:flex;gap:8px;align-items:center"><input id="lc_enabled" type="checkbox" style="width:auto" ${ro} ${cfg.enabled?'checked':''}> Loyalty programme enabled</label>
+    <div class="grid2">${F('spend','Spend (₹) needed to earn points')}${F('points','Points earned per that spend')}</div>
+    <div class="grid2">${F('rupeePerPoint','Value of 1 point (₹)')}${F('minRedeem','Minimum points to redeem')}</div>
+    <div class="grid2">${F('maxRedeemPerInvoice','Max redemption per invoice (₹, 0 = none)')}${F('expiryDays','Points expire after (days, 0 = never)')}</div>
+    <div class="muted" style="font-size:12px;margin:6px 0">Example now: ${fmt(1000)} spent = ${fpts(loyaltyPointsFor(1000,cfg))} points = ${fmt(loyaltyPointsFor(1000,cfg)*cfg.rupeePerPoint)} redeemable. Points are earned only on fully paid invoices.</div>
+    ${isAdmin()?`<button class="btn primary" onclick="loyaltySave()">Save loyalty settings</button>`:''}</div>
+  <div class="section-title">Top loyalty customers</div>
+  ${top.map(t=>`<div class="list-item" style="cursor:pointer" onclick="state.custProfile='${t.m}';go('customerProfile')"><span>${esc(t.name)}<br><span class="muted" style="font-size:12px">earned ${fpts(t.earned)} · redeemed ${fpts(t.redeemed)}</span></span><b>${fpts(t.balance)} pts</b></div>`).join('')||'<div class="muted">No loyalty activity yet.</div>'}`;
+}
+async function loyaltySave(){
+  if(!needAdmin()) return; const g=k=>document.getElementById('lc_'+k); const n=k=>Math.max(0,Number(g(k).value)||0);
+  const cfg={ enabled:g('enabled').checked, spend:n('spend'), points:n('points'), rupeePerPoint:n('rupeePerPoint'), minRedeem:n('minRedeem'), maxRedeemPerInvoice:n('maxRedeemPerInvoice'), expiryDays:Math.round(n('expiryDays')) };
+  if(cfg.enabled && !(cfg.spend>0 && cfg.points>0 && cfg.rupeePerPoint>0)){ tell('Spend, points per spend and the value of a point must all be greater than zero.'); return; }
+  await patchSettings({ loyalty:cfg }); showToast('Loyalty settings saved'); render();
+}
+
+/* ---------- Loyalty & membership reports (saved records only) ---------- */
+async function screenLmReports(){
+  const R = state.lm = state.lm || { from:ymd(Date.now()-29*864e5), to:ymd(Date.now()) };
+  const t0=new Date(R.from+'T00:00:00').getTime(), t1=new Date(R.to+'T23:59:59.999').getTime(), inR=ts=>ts>=t0&&ts<=t1;
+  const cfg=loyaltyCfg(); const [txsAll, mems, custs, invs] = await Promise.all([loyaltyTxs(), dbAll('memberships'), dbAll('customers'), dbAll('invoices')]);
+  const txs=txsAll.filter(t=>inR(t.ts)); const issued=rnd2(txs.filter(t=>t.type==='earn').reduce((z,t)=>z+t.points,0)); const redeemed=rnd2(-txs.filter(t=>t.type==='redeem').reduce((z,t)=>z+t.points,0));
+  const sumAll=loyaltySummary(txsAll);
+  const sold=mems.filter(m=>m.payment && inR(m.payment.date)); const rev=sold.reduce((z,m)=>z+m.payment.amount,0);
+  const byPlan={}; sold.forEach(m=>{ const k=m.period+' '+m.planName; (byPlan[k]=byPlan[k]||{n:0,rev:0}).n++; byPlan[k].rev+=m.payment.amount; });
+  const act=mems.filter(m=>memStatus(m)==='Active'), exp=mems.filter(m=>memStatus(m)==='Expired'), can_=mems.filter(m=>memStatus(m)==='Cancelled');
+  const useRows=mems.flatMap(m=>(m.usage||[]).filter(u=>!u.reversed && inR(u.ts)).map(u=>({ m, u })));
+  const usedMin=useRows.reduce((z,r)=>z+r.u.minutes,0), allocated=act.reduce((z,m)=>z+m.freeHours,0), remaining=act.reduce((z,m)=>z+memRemainMin(m),0)/60;
+  const perf={}; mems.forEach(m=>{ const p=perf[m.mobile]=perf[m.mobile]||{ name:m.customerName, mobile:m.mobile, spend:0, hours:0, n:0 }; p.spend+=m.payment?m.payment.amount:0; p.hours+=memUsedMin(m)/60; p.n++; });
+  const cm={}; custs.forEach(c=>cm[c.mobile]=c); Object.values(perf).forEach(p=>{ p.total=(cm[p.mobile]||{}).totalSpend||0; });
+  const perfRows=Object.values(perf).sort((a,b)=>b.spend-a.spend);
+  const tbl=(head,rows)=>`<div style="overflow-x:auto"><table style="min-width:100%"><tr>${head.map(h=>`<th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">${h}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td style="padding:4px 6px;font-size:13px;white-space:nowrap">${c}</td>`).join('')}</tr>`).join('')}</table></div>`;
+  const kp=(v,l)=>`<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('more')">← Back</button><h2>Loyalty &amp; Membership Reports</h2>
+  <div class="card"><div class="grid2"><div><label>From</label><input type="date" id="lmFrom" value="${R.from}" onchange="state.lm.from=this.value;render()"></div><div><label>To</label><input type="date" id="lmTo" value="${R.to}" onchange="state.lm.to=this.value;render()"></div></div></div>
+  <div class="section-title">Loyalty Management</div><div class="card"><div class="grid2" id="lmLoy">${kp(fpts(issued),'Points issued (range)')}${kp(fpts(redeemed),'Points redeemed (range)')}${kp(fpts(sumAll.balance),'Outstanding points')}${kp(fmt(sumAll.balance*cfg.rupeePerPoint),'Outstanding liability')}</div>
+    <div class="muted" style="font-size:11px;margin:10px 0 4px;text-transform:uppercase">Loyalty transactions (${txs.length})</div>
+    ${txs.length?tbl(['Date','Customer','Invoice','Type','Points','Balance'],txs.slice().reverse().slice(0,200).map(t=>[fdt(t.ts),esc((cm[t.mobile]||{}).name||t.mobile),esc(t.invoiceNumber||'—'),esc(t.type.replace('_',' ')),(t.points>0?'+':'')+fpts(t.points),fpts(t.balanceAfter)])):'<div class="muted">None in this range.</div>'}</div>
+  <div class="section-title">Membership Sales &amp; Revenue</div><div class="card"><div class="grid2" id="lmMem">${kp(sold.length,'Memberships sold')}${kp(fmt(rev),'Membership revenue')}${kp(act.length,'Active memberships')}${kp(exp.length+can_.length,'Expired / cancelled')}</div>
+    ${Object.keys(byPlan).length?tbl(['Plan','Sold','Revenue'],Object.entries(byPlan).map(([k,v])=>[esc(k),v.n,fmt(v.rev)])):'<div class="muted" style="margin-top:6px">No sales in this range.</div>'}</div>
+  <div class="section-title">Free Gaming Hours Usage</div><div class="card"><div class="grid2" id="lmFree">${kp(memHours(usedMin),'Hours used (range)')}${kp(rnd2(allocated)+'h','Allocated (active plans)')}${kp(rnd2(remaining)+'h','Remaining (active plans)')}${kp(useRows.length,'Usage entries')}</div>
+    ${useRows.length?tbl(['Date','Member','Invoice','Free time'],useRows.sort((a,b)=>b.u.ts-a.u.ts).slice(0,200).map(r=>[fdt(r.u.ts),esc(r.m.customerName),esc(r.u.invoiceNumber||''),fmtDur(r.u.minutes)])):''}</div>
+  <div class="section-title">Active &amp; Expired Memberships</div><div class="card">${mems.length?tbl(['Member','Plan','Status','Expiry','Free left'],mems.slice().sort((a,b)=>b.startDate-a.startDate).map(m=>[esc(m.customerName),esc(m.period+' '+m.planName),memStatus(m),fdate(m.expiryDate),memHours(memStatus(m)==='Active'?memRemainMin(m):0)])):'<div class="muted">No memberships yet.</div>'}</div>
+  <div class="section-title">Customer Membership Performance</div><div class="card">${perfRows.length?tbl(['Customer','Plans','Paid for membership','Free hrs used','Lifetime spend'],perfRows.map(p=>[esc(p.name),p.n,fmt(p.spend),rnd2(p.hours)+'h',fmt(p.total)])):'<div class="muted">No members yet.</div>'}</div>`;
 }
 
 /* ============ Expenses (with recurring + payment method) ============ */
@@ -2779,9 +3197,10 @@ function repInvoice(inv, pm, F){
   const allG = all.filter(x=>x.cat==='gaming').reduce((s,x)=>s+x.amount,0), mG = L.filter(x=>x.cat==='gaming').reduce((s,x)=>s+x.amount,0);
   const discount = (inv.discount||0) * (allG>0 ? mG/allG : 0);
   const grand = inv.grandTotal||0, credits = invoiceCredits(inv);
-  const credEx = grand>0 ? credits*((sub-(inv.discount||0))/grand) : 0, credTax = credits-credEx;   // a credit note refunds revenue AND its share of tax
+  const credEx = grand>0 ? credits*((sub-(inv.discount||0)-(inv.benefitTotal||0))/grand) : 0, credTax = credits-credEx;   // a credit note refunds revenue AND its share of tax
   const cats = {}; CAT_ORDER.forEach(c=>cats[c]=0);
-  L.forEach(x=>{ cats[x.cat]+=x.amount; }); cats.gaming -= discount; cats.other += (inv.adjustmentAmt||0)*share;   // an invoice adjustment is part of what was billed
+  L.forEach(x=>{ cats[x.cat]+=x.amount; }); cats.gaming -= discount; cats.other += (inv.adjustmentAmt||0)*share;
+  { const bt=(inv.benefitTotal||0)*share, c0=CAT_ORDER.reduce((z,c)=>z+cats[c],0); if(bt>0 && c0>0) CAT_ORDER.forEach(c=>{ cats[c] -= bt*cats[c]/c0; }); }   // membership / loyalty benefits reduce revenue pro rata   // an invoice adjustment is part of what was billed
   const net0 = CAT_ORDER.reduce((s,c)=>s+cats[c],0);
   if(net0>0) CAT_ORDER.forEach(c=>{ cats[c] -= credEx*share*cats[c]/net0; });
   CAT_ORDER.forEach(c=>cats[c]=r2(cats[c]));
@@ -3155,6 +3574,9 @@ function screenMore(){
     ${row("go('set_items')",'Items Catalogue')}
     ${row("go('set_stations')",'Gaming Setups')}
     ${row("go('customers')",'Customers')}
+    ${row("go('membership')",'Membership','Plans, members, free hours, receipts')}
+    ${row("go('loyalty')",'Loyalty Points','Earn / redeem rules, balances, top customers')}
+    ${row("go('lmReports')",'Loyalty & Membership Summary','Sales, free hours, points, performance')}
     ${row("go('vendors')",'Vendors')}
     ${row("go('reports')",'Reports')}
     ${row("go('purchases')",'Purchases')}

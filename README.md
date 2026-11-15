@@ -265,3 +265,19 @@ Ending a gaming segment now pre-fills at least 60 minutes (10, 30, 45, 59 or 60 
 - Name search is case-insensitive and matches prefixes, word starts, fragments and similar spellings ("bhav" finds Bavya). Mobile search matches prefixes, fragments and last digits (2+ digits).
 - Selecting fills name and mobile and keeps the saved customer (mobile is the customer ID). Nothing is created or duplicated by searching or selecting; with no match you simply keep typing a new customer.
 - Tap, arrow keys + Enter, and Escape (dismiss) are supported. Searches only the local customer store, so it works offline.
+
+## Version 12 — Quantity control, full invoice+session deletion, Loyalty, Membership
+
+**Quantity (Item Information)** — `[ − ] [ + ] [ Quantity ]`. Tap the number to type any value (comma or dot decimals). − never goes below one step (1, or 0.5 h for gaming). The amount updates instantly and saving keeps the rate, name and description. Existing lines in an open session are edited the same way, any number of times.
+
+**Invoice deletion** — Admin delete now removes the invoice, its gaming session (with every segment/line inside it), customer-history entries, daily totals, and reverses loyalty points and membership free-hour usage. Other sessions of the same customer are never touched. Uses stable invoice/session IDs, so nothing reappears after refresh. (Old soft-deleted invoices can still be restored from the Deleted tab.)
+
+**Loyalty** (More → Loyalty Points) — configurable earn rule (default ₹10 = 1 point), point value (default ₹1), minimum redemption, per-invoice maximum, expiry and on/off. Points are earned only on fully paid invoices (once per invoice; paying a due invoice later earns them), redeemed at checkout (deducted only when the invoice is finalised), and reversed on deletion or credit/refund. Every movement is a row in `loyaltyTx` with invoice number and balance after.
+
+**Membership** (More → Membership) — six default plans (Monthly Bronze/Silver/Gold, Yearly Bronze/Silver/Platinum) with the exact prices, hours and discounts; all editable, plus new plans. Admin sells/assigns to an existing customer, records payment (credited to the account), gets a receipt (WhatsApp share). One active membership per customer; status Active / Expired / Cancelled; history kept.
+- Free-hour wallet per membership. **Group rule:** only the owner's own minutes are deducted (never × players); the owner's per-player share of that line is made free, the other players stay billable. Time beyond the wallet is charged at the member price. Snacks/drinks discount applies to food only and never uses free hours.
+- No stacking: manual discount is disabled while membership benefits apply. Loyalty points can still be redeemed.
+- Free hours are forfeited at expiry/cancellation. Deleting an invoice returns the hours.
+- Checkout has a *Membership & Loyalty* panel; customer profile shows badge, plan, dates, free hours, points, spending and full histories; More → *Loyalty & Membership Summary* has date-range reports.
+
+New Firestore collections: `memberships`, `loyaltyTx` (covered by the existing rules and backups).
