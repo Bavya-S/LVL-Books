@@ -21,6 +21,11 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // v13: the financial ledger is APPEND-ONLY — entries can be created and read, never edited or deleted.
+    match /ledger/{tx} {
+      allow read, create: if request.auth != null;
+      allow update, delete: if false;
+    }
     match /{document=**} {
       allow read, write: if request.auth != null;
     }

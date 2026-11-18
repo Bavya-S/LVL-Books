@@ -17,7 +17,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
   import { getAnalytics, isSupported as analyticsSupported } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
   import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-    collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, writeBatch, query, where, runTransaction
+    collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, writeBatch, query, where, orderBy, limit, startAfter, runTransaction
   } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
   const firebaseConfig = {
@@ -34,7 +34,7 @@
   // Offline persistence + multi-tab: the app keeps working with no signal and syncs when back online.
   const db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
   const auth = getAuth(app);
-  window.__fb = { app, db, auth, collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, writeBatch, query, where, runTransaction };
+  window.__fb = { app, db, auth, collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, writeBatch, query, where, orderBy, limit, startAfter, runTransaction };
   window.__fbReady = false;
   signInAnonymously(auth).catch(err=>console.warn('Cloud sign-in unavailable (working from saved data):', err && err.code));
   onAuthStateChanged(auth, (user)=>{ if(user){ window.__fbReady = true; window.dispatchEvent(new Event('fb-ready')); } });
@@ -383,7 +383,7 @@ function waitForFirebase(){
   });
 }
 const KEYPATH = { customers:'mobile', bsessions:'id', invoices:'id', products:'id', expenses:'id', settings:'key', vendors:'id', purchases:'id',
-  employees:'id', employeeTx:'id', accounts:'name', dailyRecords:'date', stations:'id', inventoryTx:'id', physical:'id', deletedInvoices:'id', auditLog:'id', memberships:'id', loyaltyTx:'id' };
+  employees:'id', employeeTx:'id', accounts:'name', dailyRecords:'date', stations:'id', inventoryTx:'id', physical:'id', deletedInvoices:'id', auditLog:'id', memberships:'id', loyaltyTx:'id', ledger:'id', archivedInvoices:'id' };
 const AUTOINC = new Set(['bsessions','invoices','products','expenses','vendors','purchases','employees','employeeTx','stations','inventoryTx','physical','auditLog','memberships','loyaltyTx']);
 const WINDOWED = { invoices:{field:'date',days:120}, bsessions:{field:'startTime',days:120} };
 const __cache = {}, __ready = {};
@@ -624,7 +624,7 @@ function overtimeUnitLabel(s){
 
 const ALL_STORES = ['customers','bsessions','invoices','products','expenses','settings','vendors','purchases','employees','employeeTx','accounts','dailyRecords','stations','physical','deletedInvoices','auditLog','memberships','loyaltyTx'];
 /* Inventory was removed from the app. Old stock records are no longer synced or shown, but they stay in the database and in every backup. */
-const BACKUP_STORES = [...ALL_STORES, 'inventoryTx'];
+const BACKUP_STORES = [...ALL_STORES, 'inventoryTx', 'archivedInvoices', 'ledger'];   // archivedInvoices + ledger are read on demand (indexed, paginated), never mirrored in memory
 
 /* ============ CSV export ============ */
 function toCSV(rows){
@@ -697,6 +697,8 @@ async function boot(){
   if(navigator.storage && navigator.storage.persist){ try{ await navigator.storage.persist(); }catch(e){} }
   await startSync();
   await loadSettingsAndSeed();
+  try{ state.restorePending = localStorage.getItem('lvl_restore_pending')==='1'; }catch(e){}
+  window.__migration = runMigrations().catch(e=>{ console.error('migration', e); return { error:String(e) }; });   // upgrades older data in the background; safe to repeat
   await maybeAutoBackup();
   setupManifestAndInstall();
   setupNavigation(); setupPullToRefresh(); setupChartTips();
@@ -732,6 +734,7 @@ function aggregateDaily(records, keyFn, limit){
 async function updateDailyRecord(dateStr){
   const invoices = (await dbAll('invoices')).filter(i=>dateKey(i.date)===dateStr);
   const expenses = (await dbAll('expenses')).filter(e=>!e.isTemplate && dateKey(e.date)===dateStr);
+  invoices.push(...(await archivedOnDay(dateStr)));   // archived invoices of that day still count (they are in a separate store, so never counted twice)
   const sales = invoices.reduce((s,i)=>s+i.grandTotal,0);
   const exp = expenses.reduce((s,e)=>s+e.amount,0);
   const gamingRev = invoices.reduce((s,i)=>s+(i.gamingAmount||0)+(i.accompanyAmount||0)+(i.overtimeAmount||0),0);
@@ -764,19 +767,20 @@ async function triggerInstall(){
 /* ============ Navigation ============ */
 const NAV = [
   {id:'dashboard', ic:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>', label:'Dashboard'},
-  {id:'gaming', ic:'<svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="11" rx="4"/><path d="M7 10v5M4.5 12.5h5"/><circle cx="16" cy="11.5" r="1"/><circle cx="18.5" cy="14" r="1"/></svg>', label:'Sessions'},
-  {id:'invoices', ic:'<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7M9 8h3"/></svg>', label:'Invoices'},
+  {id:'gaming', ic:'<svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="11" rx="4"/><path d="M7 10v5M4.5 12.5h5"/><circle cx="16" cy="11.5" r="1"/><circle cx="18.5" cy="14" r="1"/></svg>', label:'Session'},
+  {id:'invoices', ic:'<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7M9 8h3"/></svg>', label:'Invoice'},
+  {id:'membership', ic:'<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.6 1.8-2.4 3-2.4s2.4.8 3 2.4M15 10h3M15 13h3"/></svg>', label:'Membership'},
   {id:'more', ic:'<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>', label:'More'},
 ];
 function renderNav(){
   document.getElementById('navbar').innerHTML = NAV.map(n=>`
-    <button class="navbtn ${(state.screen===n.id || (n.id==='gaming' && ['session','checkout','picker'].includes(state.screen)) || (n.id==='invoices' && state.screen==='invoiceView') || (n.id==='more' && /^set_|settings|backup|adminInvoices|membership|loyalty|lmReports/.test(state.screen)))?'active':''}" onclick="navTab('${n.id}')"><span class="ic">${n.ic}</span>${n.label}${n.id==='more' && state.showBackupReminder ? '<span class="dot" aria-label="Backup due"></span>' : ''}</button>`).join('');
+    <button class="navbtn ${(state.screen===n.id || (n.id==='gaming' && ['session','checkout','picker'].includes(state.screen)) || (n.id==='invoices' && state.screen==='invoiceView') || (n.id==='more' && /^set_|settings|backup|adminInvoices|adminTools|integrity|ledgerView|loyalty|lmReports/.test(state.screen)))?'active':''}" onclick="navTab('${n.id}')"><span class="ic">${n.ic}</span>${n.label}${n.id==='more' && state.showBackupReminder ? '<span class="dot" aria-label="Backup due"></span>' : ''}</button>`).join('');
 }
 /* ---- Android-style navigation ----
    navStack is the in-memory Back stack (screens you can go Back to). The Android Back button / gesture arrives as a browser
    'popstate'; a guard history entry makes sure every Back press is caught by the app instead of closing it.
    Active gaming sessions live in the database, so navigating Back never discards one. */
-const NAV_TABS = ['dashboard','gaming','invoices','more'];
+const NAV_TABS = ['dashboard','gaming','invoices','membership','more'];
 const NAV_IDENTITY = ['sessionId','invoiceId','custProfile','vendorId','empId'];
 let navStack = [];                       // previous screens, most recent last
 let navCur = { screen:'dashboard', scrollY:0 };   // identity of the screen on display
@@ -1003,7 +1007,7 @@ async function render(){
     vendors:screenVendors, vendorProfile:screenVendorProfile, purchases:screenPurchases, employees:screenEmployees, employeeProfile:screenEmployeeProfile,
     cashbank:screenCashBank, reports:screenReports, session:screenSession, checkout:screenCheckout, invoiceView:screenInvoiceView,
     set_items:screenSetItems, set_stations:screenSetStations, set_pricing:screenSetPricing, set_custom:screenSetCustom, set_overtime:screenSetOvertime,
-    set_accompany:screenSetAccompany, picker:screenPicker, itemInfo:screenItemInfo, set_physical:screenSetPhysical, set_tax:screenSetTax, set_invoice:screenSetInvoice, set_business:screenSetBusiness, set_perm:screenSetPerm, adminInvoices:screenAdminInvoices, membership:screenMembership, loyalty:screenLoyalty, lmReports:screenLmReports };
+    set_accompany:screenSetAccompany, picker:screenPicker, itemInfo:screenItemInfo, set_physical:screenSetPhysical, set_tax:screenSetTax, set_invoice:screenSetInvoice, set_business:screenSetBusiness, set_perm:screenSetPerm, adminInvoices:screenAdminInvoices, membership:screenMembership, adminTools:screenAdminTools, integrity:screenIntegrity, ledgerView:screenLedger, loyalty:screenLoyalty, lmReports:screenLmReports };
   const fn = SCREENS[state.screen] || screenDashboard;
   let body;
   try{ body = await fn(); }
@@ -1982,7 +1986,7 @@ async function finalizeSessionCore(f, opts){
   if(mobRaw && !mob) throw new Error('Enter a valid 10-digit Indian mobile number, or leave it blank.');
   const name=(f.name||'').trim();
   const date = opts.date || Date.now();
-  const mem = mob ? await activeMembership(mob) : null, acct = mob ? await loyaltyAccount(mob) : null;
+  const mem = mob ? await activeMembership(mob) : null, acct = mob ? await loyaltyAccount(mob) : null; const cust0 = mob ? await dbGet('customers', mob) : null;
   const plan = benefitPlan(s.lines, Object.assign({}, f, { memOn: f.memOn===true }), settings, mem, acct, finOf(s)); const t = plan.t;
   const payments = (f.payments||[]).map(p=>({ method:p.method, amount:Math.round(Number(p.amount)||0), date })).filter(p=>p.amount>0);
   const paid = payments.reduce((a,p)=>a+p.amount,0);
@@ -1996,7 +2000,7 @@ async function finalizeSessionCore(f, opts){
   const gl = lines.filter(l=>l.kind==='gaming');
   const inv = { number, date, invoiceDate:invDate, dueTerms:f.terms||'Due on receipt', dueDate:addDaysStr(invDate, DUE_TERMS[f.terms]||0),
     orderNo:f.orderNo||'', salesperson:f.salesperson||'', subject:f.subject||'', notes:f.notes||'',
-    sessionId:s.id, sessionCode:sesCode(s), groupName:s.groupName||'', customerName:name||'Walk-in Customer', customerMobile:mob,
+    sessionId:s.id, sessionCode:sesCode(s), groupName:s.groupName||'', customerName:name||'Walk-in Customer', customerMobile:mob, customerId:(cust0&&cust0.cid)||'',
     lines, gamingAmount:t.gaming, accompanyAmount:t.accompany, overtimeAmount:t.overtime, foodAmount:t.food, otherAmount:t.other,
     subtotal:t.subtotal, discountPercent:t.discountPct, discount:t.discount, tax:t.tax, adjustmentAmt:t.adjustment, tcs:t.tcs, tds:t.tds, taxLabel:settings.taxEnabled?`${settings.taxLabel||'Tax'} ${settings.taxRate}%`:'',
     memFree:t.memFree, memDisc:t.memDisc, memFood:t.memFood, loyaltyValue:t.loyalty, loyaltyPoints:plan.loyaltyPts, benefitTotal:t.benefit,
@@ -2016,9 +2020,15 @@ async function finalizeSessionCore(f, opts){
     let c = await dbGet('customers', mob);
     if(!c) c = { mobile:mob, name:name||'Walk-in Customer', email:'', address:'', joined:nowIso, visits:0, gamingSessions:0, gamingHours:0, gamingSpend:0, foodSpend:0, totalSpend:0, lastVisit:nowIso, invoiceIds:[] };
     if(name) c.name=name;
+    if(!c.cid) c.cid = (c.visits===0 && c.joined===nowIso) ? newCid() : cidForMobile(c.mobile);
     c.visits+=1; c.gamingSessions+=gl.length; c.gamingHours+=inv.durationMins/60;
     c.gamingSpend+=t.gaming+t.accompany+t.overtime; c.foodSpend+=t.food; c.totalSpend+=t.grand; c.lastVisit=nowIso; c.invoiceIds.push(inv.id);
     await dbPut('customers', c);
+    if(inv.customerId!==c.cid){ inv.customerId = c.cid; await dbPut('invoices', inv); }
+  });
+  await soft(async()=>{
+    await ledgerPost({ type:'invoice_create', customerId:inv.customerId||'', mobile:mob, invoiceId:inv.id, invoiceNumber:number, amount:inv.grandTotal, description:`Invoice ${number} created`, meta:invSnapshot(inv), ts:date });
+    for(const p of payments) await ledgerPost({ type:'invoice_payment', customerId:inv.customerId||'', mobile:mob, invoiceId:inv.id, invoiceNumber:number, amount:p.amount, description:`Payment by ${p.method}`, meta:{ method:p.method }, ts:date });
   });
   await soft(async()=>{ for(const p of payments) await creditAccount(p.method, p.amount); });
   await soft(async()=>{ await applyBenefitsToInvoice(inv, plan, mob); });
@@ -2172,7 +2182,7 @@ async function screenInvoiceView(){
       ${bal>0?`<button class="btn primary" onclick="recordPaymentModal(${inv.id})">+ Record payment</button>`:''}
       <button class="btn" onclick="creditRefundModal(${inv.id})">Credit / Refund</button>
     </div>
-    ${isAdmin()?`<button class="btn danger" style="margin-top:10px" onclick="adminDeleteModal([${inv.id}])">Delete invoice</button>`:''}`;
+    ${isAdmin()?`${bal<=0?`<button class="btn" style="margin-top:10px" onclick="archiveOneModal(${inv.id})">Archive invoice</button> `:''}<button class="btn danger" style="margin-top:10px" onclick="adminDeleteModal([${inv.id}])">Delete invoice</button>`:''}`;
 }
 async function syncSessionStatusForInvoice(inv){
   if(!inv.sessionId) return; const s = await dbGet('bsessions', inv.sessionId);
@@ -2192,6 +2202,7 @@ async function confirmRecordPayment(id){
   inv.payments = inv.payments||[]; inv.payments.push({ method, amount:amt, date:Date.now() });
   inv.status = invoiceBalance(inv)<=0?'paid':'finalized'; inv.paymentMethod = [...new Set(inv.payments.map(p=>p.method))].join(' + ');
   await dbPut('invoices', inv); await creditAccount(method, amt); await syncSessionStatusForInvoice(inv);
+  await ledgerPost({ type:'invoice_payment', customerId:inv.customerId||'', mobile:inv.customerMobile||'', invoiceId:inv.id, invoiceNumber:inv.number, amount:amt, description:`Payment by ${method}`, meta:{ method } });
   try{ await loyaltyAward(inv); }catch(e){ console.error('loyalty award failed', e); }
   closeModal(); showToast('Payment recorded'); render();
 }
@@ -2216,6 +2227,7 @@ async function confirmCreditRefund(id){
   if(type==='refund'){ inv.payments.push({ method, amount:-amt, date:Date.now(), type:'refund', reason }); await debitAccount(method, amt); }
   inv.status = invoiceBalance(inv)<=0?'paid':'finalized';
   await dbPut('invoices', inv); await syncSessionStatusForInvoice(inv);
+  await ledgerPost({ type:type==='refund'?'invoice_refund':'invoice_credit', customerId:inv.customerId||'', mobile:inv.customerMobile||'', invoiceId:inv.id, invoiceNumber:inv.number, amount:type==='refund'?-amt:amt, description:(type==='refund'?'Refund by '+method:'Credit note'), reason, meta:{ method:type==='refund'?method:'' } });
   try{ await loyaltyReverseForCredit(inv, amt); }catch(e){ console.error('loyalty reversal failed', e); }
   closeModal(); showToast('Saved to the invoice audit trail'); render();
 }
@@ -2230,10 +2242,13 @@ function filterInvoices(){
   const el=document.getElementById('invList'); if(el) el.innerHTML=invRowsHtml(list.slice(0,200));
 }
 async function screenInvoices(){
+  const tab = state.invTab||'active';
+  const tabs = `<div style="margin-bottom:8px"><span class="chip ${tab==='active'?'sel':''}" id="tabActive" onclick="state.invTab='active';render()">Active</span><span class="chip ${tab==='archive'?'sel':''}" id="tabArchive" onclick="state.invTab='archive';render()">Archive</span></div>`;
+  if(tab==='archive') return `<h2>Invoices</h2>${tabs}`+screenInvoiceArchiveHtml();
   __invCache = (await dbAll('invoices')).sort((a,b)=>b.date-a.date);
   const f = state.invFilter||'all';
   setTimeout(filterInvoices,0);
-  return `<h2>Invoices</h2>${isAdmin()?`<button class="btn danger" style="margin-bottom:8px" onclick="openAdminInvoices()">Admin: manage / delete invoices</button>`:''}<input id="invSearch" placeholder="Search number, name or mobile" oninput="filterInvoices()" style="margin-bottom:8px">
+  return `<h2>Invoices</h2>${tabs}${isAdmin()?`<button class="btn danger" style="margin-bottom:8px" onclick="openAdminInvoices()">Admin: manage / delete invoices</button>`:''}<input id="invSearch" placeholder="Search number, name or mobile" oninput="filterInvoices()" style="margin-bottom:8px">
     <div style="margin-bottom:8px">${[['all','All'],['due','Balance due'],['paid','Paid']].map(([k,l])=>`<span class="chip ${f===k?'sel':''}" onclick="state.invFilter='${k}';render()">${l}</span>`).join('')}</div>
     <button class="btn" style="margin-bottom:10px" onclick="exportInvoicesCSV()">Export CSV</button><div id="invList"></div>`;
 }
@@ -2268,7 +2283,7 @@ async function admAdjustDaily(inv, sign){   // incremental, so invoices older th
   await dbPut('dailyRecords', r);
 }
 async function admAdjustCustomer(inv, sign){
-  const mob = inv.customerMobile; if(!mob) return false;
+  const mob = await invMobile(inv); if(!mob) return false;
   const c = await dbGet('customers', mob); if(!c) return false;
   const gl = (inv.lines||[]).filter(l=>l.kind==='gaming'); const g = (inv.gamingAmount||0)+(inv.accompanyAmount||0)+(inv.overtimeAmount||0);
   c.visits = Math.max(0,(c.visits||0)+sign); c.gamingSessions = Math.max(0,(c.gamingSessions||0)+sign*gl.length);
@@ -2285,9 +2300,9 @@ async function admAudit(action, inv, extra){
 /* Soft delete. Options: reason, reverseAccounts, sessionMode ('reopen' | 'cancel'), pin. */
 async function deleteInvoiceCore(id, o){
   o = o||{}; await admAuthorize(o.pin);
-  const inv = await dbGet('invoices', id); if(!inv) throw new Error('Invoice not found — it may already have been deleted.');
+  const inv = await getInvoiceAny(id); if(!inv) throw new Error('Invoice not found — it may already have been deleted.');
   const paid = invoicePaid(inv); const reason = (o.reason||'').trim() || 'Deleted by admin';
-  const rec = { id:inv.id, number:inv.number, amount:inv.grandTotal, paidAtDelete:paid, customerName:inv.customerName||'', customerMobile:inv.customerMobile||'', invoiceDate:inv.date, deletedAt:Date.now(), deletedBy:'Admin', reason, actions:{ accountsReversed:[], customerAdjusted:false, session:null }, warnings:[], invoice:inv };
+  const rec = { id:inv.id, number:inv.number, amount:inv.grandTotal, paidAtDelete:paid, customerName:inv.customerName||'', customerMobile:inv.customerMobile||'', invoiceDate:inv.date, deletedAt:Date.now(), deletedBy:'Admin', reason, actions:{ accountsReversed:[], customerAdjusted:false, session:null }, warnings:[], invoice:stripArchive(inv), fromArchive:!!inv.archived, customerId:inv.customerId||'' };
   await dbPut('deletedInvoices', rec);   // archive FIRST — if this fails nothing else has been touched
   const actions = rec.actions, warnings = rec.warnings;   // dbPut deep-copies nested objects onto rec, so track changes on THESE
   const step = async(label, fn)=>{ try{ await fn(); }catch(e){ console.error('delete step failed:', label, e); warnings.push(label+': '+(e&&e.message?e.message:e)); } };
@@ -2305,7 +2320,9 @@ async function deleteInvoiceCore(id, o){
   });
   await step('loyalty & membership', async()=>{ actions.benefits = await benefitsReverse(inv); });
   await step('daily totals', async()=>{ await admAdjustDaily(inv, -1); });
-  await dbDel('invoices', id);
+  await dbDel('invoices', id); if(inv.archived) await dbDel('archivedInvoices', id);
+  const dled = await ledgerPost({ type:'invoice_delete', customerId:inv.customerId||'', mobile:inv.customerMobile||'', invoiceId:inv.id, invoiceNumber:inv.number, amount:inv.grandTotal, description:`Invoice ${inv.number} deleted`, reason, meta:invSnapshot(inv) });
+  for(const p of actions.accountsReversed||[]) await ledgerPost({ type:'invoice_payment_reversal', customerId:inv.customerId||'', mobile:inv.customerMobile||'', invoiceId:inv.id, invoiceNumber:inv.number, amount:-p.amount, originalRef:dled.id, description:`Payment by ${p.method} reversed (invoice deleted)`, reason, meta:{ method:p.method } });
   await dbPut('deletedInvoices', rec);   // final copy including what was adjusted
   await admAudit('invoice_delete', inv, { reason, paid, actions, warnings });
   return rec;
@@ -2334,6 +2351,7 @@ async function restoreInvoiceCore(id, o){
   await step('loyalty & membership', async()=>{ if(a.benefits) await benefitsReapply(inv, a.benefits); });
   await step('daily totals', async()=>{ await admAdjustDaily(inv, +1); });
   await dbDel('deletedInvoices', id);
+  await ledgerPost({ type:'invoice_restore', customerId:inv.customerId||'', mobile:inv.customerMobile||'', invoiceId:inv.id, invoiceNumber:inv.number, amount:inv.grandTotal, description:`Invoice ${inv.number} restored`, reason:'Restored by admin' });
   await admAudit('invoice_restore', inv, { warnings });
   return inv;
 }
@@ -2341,8 +2359,9 @@ async function restoreInvoiceCore(id, o){
 async function purgeInvoiceCore(id, o){
   o = o||{}; await admAuthorize(o.pin);
   const rec = await dbGet('deletedInvoices', id); if(!rec) throw new Error('Deleted invoice not found.');
-  await dbDel('deletedInvoices', id);
   const inv = rec.invoice||{};
+  await ledgerPost({ type:'invoice_purge', customerId:rec.customerId||inv.customerId||'', mobile:rec.customerMobile||'', invoiceId:rec.id, invoiceNumber:rec.number, amount:rec.amount, description:`Invoice ${rec.number} permanently removed from the app — essential record kept here`, reason:(o.reason||rec.reason||''), meta:invSnapshot(Object.assign({ grandTotal:rec.amount, number:rec.number }, inv)) });   // the money history stays in the ledger
+  await dbDel('deletedInvoices', id);
   await admAudit('invoice_purge', { id:rec.id, number:rec.number, grandTotal:rec.amount, customerName:rec.customerName }, { reason:(o.reason||rec.reason||''), paid:rec.paidAtDelete, lines:(inv.lines||[]).length, invoiceDate:rec.invoiceDate, deletedAt:rec.deletedAt });
 }
 
@@ -2408,7 +2427,7 @@ function admPinField(hasPin){ return hasPin ? `<label>Admin PIN (required)</labe
 async function adminDeleteModal(ids){
   if(!isAdmin()){ tell('Only an administrator can delete invoices.'); return; }
   ids = ids.filter(x=>x!==undefined && x!==null); if(!ids.length) return;
-  const invs = []; for(const id of ids){ const i = await dbGet('invoices', id); if(i) invs.push(i); }
+  const invs = []; for(const id of ids){ const i = await getInvoiceAny(id); if(i) invs.push(i); }
   if(!invs.length){ tell('Those invoices no longer exist.'); return; }
   const st = (await dbGet('settings','main')) || state.settings || {};
   const total = invs.reduce((a,i)=>a+i.grandTotal,0), paid = invs.reduce((a,i)=>a+Math.max(0,invoicePaid(i)),0);
@@ -2537,9 +2556,10 @@ async function loyaltyAccount(mobile){
   const cfg=loyaltyCfg(); const txs=await loyaltyTxs(mobile); const s=loyaltySummary(txs);
   return Object.assign(s,{ txs, cfg, value:rnd2(s.balance*cfg.rupeePerPoint), lifetimeValue:rnd2(s.earned*cfg.rupeePerPoint) });
 }
-async function loyaltyPost(mobile, type, points, inv, note){
-  const bal = loyaltySummary(await loyaltyTxs(mobile)).balance;
-  return createRecord('loyaltyTx', { ts:Date.now(), mobile, type, points:rnd2(points), invoiceId:inv?inv.id:null, invoiceNumber:inv?inv.number:'', balanceAfter:rnd2(bal+points), note:note||'' });
+async function loyaltyPost(mobile, type, points, inv, note, extra){
+  extra = extra||{}; const bal = loyaltySummary(await loyaltyTxs(mobile)).balance; const cid = await cidOfMobile(mobile);
+  const led = await ledgerPost({ type:'loyalty_'+type, customerId:cid, mobile, invoiceId:inv?inv.id:null, invoiceNumber:inv?inv.number:'', points:rnd2(points), originalRef:extra.originalRef||null, description:note||'', reason:extra.reason||'' });
+  return createRecord('loyaltyTx', { ts:Date.now(), mobile, customerId:cid, type, points:rnd2(points), invoiceId:inv?inv.id:null, invoiceNumber:inv?inv.number:'', balanceAfter:rnd2(bal+points), note:note||'', ledgerRef:led.id, originalRef:extra.originalRef||null });
 }
 /* Points are earned only when a PAID invoice (nothing owing) is finalised, once per invoice. */
 async function loyaltyAward(inv){
@@ -2548,35 +2568,52 @@ async function loyaltyAward(inv){
   const txs=(await dbAll('loyaltyTx')).filter(t=>t.invoiceId===inv.id && (t.type==='earn'));
   if(txs.length) return null;   // never twice
   const pts=loyaltyPointsFor(inv.grandTotal-invoiceCredits(inv), cfg); if(!(pts>0)) return null;
-  return loyaltyPost(inv.customerMobile,'earn',pts,inv,`Earned on ${inv.number} (${fmt(inv.grandTotal)} spent)`);
+  return loyaltyPost(await invMobile(inv),'earn',pts,inv,`Earned on ${inv.number} (${fmt(inv.grandTotal)} spent)`);
 }
 async function loyaltyReverseForCredit(inv, amount){
   if(!inv.customerMobile) return;
   const mine=(await dbAll('loyaltyTx')).filter(t=>t.invoiceId===inv.id && (t.type==='earn'||t.type==='reverse_earn'));
   const have=mine.reduce((z,t)=>z+t.points,0); if(!(have>0)) return;
-  const pts=Math.min(have, loyaltyPointsFor(amount)); if(pts>0) await loyaltyPost(inv.customerMobile,'reverse_earn',-pts,inv,`Credit/refund of ${fmt(amount)} on ${inv.number}`);
+  const orig = mine.filter(t=>t.type==='earn').pop();
+  const pts=Math.min(have, loyaltyPointsFor(amount)); if(pts>0) await loyaltyPost(await invMobile(inv),'reverse_earn',-pts,inv,`Credit/refund of ${fmt(amount)} on ${inv.number}`,{ originalRef:orig?orig.ledgerRef:null });
 }
-/* Invoice deletion: put every point and free minute back exactly as it was. Returns a snapshot so Restore can re-apply it. */
+/* Invoice deletion: put back exactly what THIS invoice took or gave — loyalty points (earned and redeemed), free hours, member discounts —
+   and nothing else. Every reversal is a new, linked ledger entry; running it twice changes nothing. Returns a snapshot so Restore can re-apply it. */
 async function benefitsReverse(inv){
-  const snap={ mobile:inv.customerMobile||'', earn:0, redeem:0, usage:[] };
-  if(inv.customerMobile){
+  const snap={ mobile:await invMobile(inv), earn:0, redeem:0, usage:[], discount:0 };
+  if(snap.mobile){
     const mine=(await dbAll('loyaltyTx')).filter(t=>t.invoiceId===inv.id);
     snap.earn = rnd2(mine.filter(t=>t.type==='earn'||t.type==='reverse_earn').reduce((z,t)=>z+t.points,0));
     snap.redeem = rnd2(-mine.filter(t=>t.type==='redeem'||t.type==='reverse_redeem').reduce((z,t)=>z+t.points,0));
-    if(snap.earn!==0) await loyaltyPost(inv.customerMobile,'reverse_earn',-snap.earn,inv,`Invoice ${inv.number} deleted`);
-    if(snap.redeem!==0) await loyaltyPost(inv.customerMobile,'reverse_redeem',snap.redeem,inv,`Invoice ${inv.number} deleted — points returned`);
+    const lastRef = ty=>{ const t=mine.filter(x=>x.type===ty).pop(); return t?t.ledgerRef||null:null; };
+    if(snap.earn!==0) await loyaltyPost(snap.mobile,'reverse_earn',-snap.earn,inv,`Invoice ${inv.number} deleted`,{ originalRef:lastRef('earn'), reason:'Invoice deleted' });
+    if(snap.redeem!==0) await loyaltyPost(snap.mobile,'reverse_redeem',snap.redeem,inv,`Invoice ${inv.number} deleted — points returned`,{ originalRef:lastRef('redeem'), reason:'Invoice deleted' });
   }
   for(const m of await dbAll('memberships')){
     const hit=(m.usage||[]).filter(u=>u.invoiceId===inv.id && !u.reversed); if(!hit.length) continue;
-    hit.forEach(u=>{ u.reversed=true; u.reversedNote=`Invoice ${inv.number} deleted`; snap.usage.push({ mid:m.id, uid:u.id }); });
+    for(const u of hit){
+      const e = await ledgerPost({ type:'membership_hours_restored', customerId:m.customerId||'', mobile:m.mobile, invoiceId:inv.id, invoiceNumber:inv.number, membershipId:m.id, hours:rnd2(u.minutes/60), originalRef:u.ledgerRef||null, description:`Invoice ${inv.number} deleted — free hours restored`, reason:'Invoice deleted' });
+      u.reversed=true; u.reversedNote=`Invoice ${inv.number} deleted`; u.reversalRef=e.id; snap.usage.push({ mid:m.id, uid:u.id });
+    }
     await dbPut('memberships', m);
+  }
+  // member discounts: reverse each ledger entry of this invoice that has not been reversed yet
+  let led = []; try{ led = await ledgerQuery('invoiceId', inv.id); }catch(e){ console.warn('ledger lookup failed', e); }
+  const done = new Set(led.filter(l=>l.type==='membership_discount_reversed').map(l=>l.originalRef));
+  for(const l of led.filter(x=>x.type==='membership_discount' && !done.has(x.id))){
+    await ledgerPost({ type:'membership_discount_reversed', customerId:l.customerId, mobile:l.mobile, invoiceId:inv.id, invoiceNumber:inv.number, membershipId:l.membershipId, amount:-l.amount, originalRef:l.id, description:`Invoice ${inv.number} deleted — member discount reversed`, reason:'Invoice deleted' });
+    snap.discount = rnd2(snap.discount + l.amount);
   }
   return snap;
 }
 async function benefitsReapply(inv, snap){
-  if(snap.mobile && snap.earn>0) await loyaltyPost(snap.mobile,'earn',snap.earn,inv,`Invoice ${inv.number} restored`);
-  if(snap.mobile && snap.redeem>0) await loyaltyPost(snap.mobile,'redeem',-snap.redeem,inv,`Invoice ${inv.number} restored`);
-  for(const r of (snap.usage||[])){ const m=await dbGet('memberships',r.mid); const u=m&&(m.usage||[]).find(x=>x.id===r.uid); if(u){ delete u.reversed; delete u.reversedNote; await dbPut('memberships',m); } }
+  const mob = (await invMobile(inv)) || snap.mobile;
+  if(mob && snap.earn>0) await loyaltyPost(mob,'earn',snap.earn,inv,`Invoice ${inv.number} restored`);
+  if(mob && snap.redeem>0) await loyaltyPost(mob,'redeem',-snap.redeem,inv,`Invoice ${inv.number} restored`);
+  for(const r of (snap.usage||[])){ const m=await dbGet('memberships',r.mid); const u=m&&(m.usage||[]).find(x=>x.id===r.uid);
+    if(u){ await ledgerPost({ type:'membership_hours_used', customerId:m.customerId||'', mobile:m.mobile, invoiceId:inv.id, invoiceNumber:inv.number, membershipId:m.id, hours:-rnd2(u.minutes/60), originalRef:u.reversalRef||null, description:`Invoice ${inv.number} restored — free hours used again` });
+      delete u.reversed; delete u.reversedNote; delete u.reversalRef; await dbPut('memberships',m); } }
+  if(snap.discount>0){ const m = await activeMembership(mob); await ledgerPost({ type:'membership_discount', customerId:inv.customerId||'', mobile:mob, invoiceId:inv.id, invoiceNumber:inv.number, membershipId:m?m.id:(inv.membership&&inv.membership.id)||null, amount:snap.discount, description:`Invoice ${inv.number} restored — member discount applied again` }); }
 }
 /* Full cascade: the session, its gaming segments / lines (stored inside it) and any other session that points at this invoice. Never touches other sessions of the same customer. */
 async function deleteSessionCascade(inv, s){
@@ -2604,29 +2641,43 @@ function invBenefitRows(inv){
 /* ---------- Membership ---------- */
 function addMonths(ts,n){ const d=new Date(ts), day=d.getDate(); d.setMonth(d.getMonth()+n); if(d.getDate()!==day) d.setDate(0); return d.getTime(); }
 function endOfDay(ts){ const d=new Date(ts); d.setHours(23,59,59,999); return d.getTime(); }
-function memStatus(m, now){ now=now||Date.now(); if(m.cancelledAt) return 'Cancelled'; if(now>m.expiryDate) return 'Expired'; return 'Active'; }
+function memStatus(m, now){ now=now||Date.now(); if(m.cancelledAt) return 'Cancelled'; if(now>m.expiryDate) return 'Expired'; if(m.startDate>now) return 'Scheduled'; return 'Active'; }
 function memUsedMin(m){ return (m.usage||[]).filter(u=>!u.reversed).reduce((z,u)=>z+(Number(u.minutes)||0),0); }
 function memRemainMin(m){ return Math.max(0, Math.round((Number(m.freeHours)||0)*60) - memUsedMin(m)); }
 function memHours(min){ return rnd2(min/60)+'h'; }
-async function activeMembership(mobile){ if(!mobile) return null; return (await dbAll('memberships')).filter(m=>m.mobile===mobile && memStatus(m)==='Active').sort((a,b)=>b.startDate-a.startDate)[0]||null; }
+async function activeMembership(mobile){ if(!mobile) return null; const c = await dbGet('customers', mobile); return (await dbAll('memberships')).filter(m=>belongsTo(m,c,mobile) && memStatus(m)==='Active').sort((a,b)=>b.startDate-a.startDate)[0]||null; }
 async function membershipPurchase(o){
   if(!isAdmin()) throw new Error('Only an administrator can sell or assign a membership.');
-  const c = await dbGet('customers', o.mobile); if(!c) throw new Error('Choose an existing customer. Create the customer first (a session with their mobile number, or via Customers).');
   const plan = memPlans().find(p=>p.id===o.planId); if(!plan) throw new Error('Choose a membership plan.');
-  if(!PAY_METHODS.includes(o.method)) throw new Error('Choose how the membership was paid.');
-  const cur = await activeMembership(o.mobile); if(cur) throw new Error(`${c.name} already has an active ${cur.period} ${cur.planName} membership (valid till ${fdate(cur.expiryDate)}). Cancel it first or wait until it expires.`);
+  const comp = !!o.complimentary;
+  if(comp){ await admAuthorize(o.pin); if(!String(o.reason||'').trim()) throw new Error('Enter the reason for the complimentary activation.'); }
+  else if(!PAY_METHODS.includes(o.method)) throw new Error('Choose how the membership was paid.');
+  let c, created = false;
+  if(o.newCustomer){ const r = await customerCreate(o.newCustomer); if(r.existed){ const err = new Error(`A customer with mobile ${fmtMobile(r.customer.mobile)} already exists (${r.customer.name}). Select that customer instead — no duplicate is created.`); err.code='DUPLICATE'; err.customer=r.customer; throw err; } c = r.customer; created = true; }
+  else { c = o.cid ? await customerByCid(o.cid) : await dbGet('customers', o.mobile); if(!c) throw new Error('Choose an existing customer, or use “New customer”.'); }
+  const cid = await ensureCid(c);
+  const mine = (await dbAll('memberships')).filter(m=>belongsTo(m,c,c.mobile));
+  if(mine.some(m=>memStatus(m)==='Scheduled')) throw new Error(`${c.name} already has a renewal queued. Wait for it to start or cancel it first.`);
+  const cur = mine.filter(m=>memStatus(m)==='Active').sort((a,b)=>b.startDate-a.startDate)[0];
+  let start = Date.now();
+  if(cur){ if(!o.renew) throw new Error(`${c.name} already has an active ${cur.period} ${cur.planName} membership (valid till ${fdate(cur.expiryDate)}). Use Renew to queue the next period, or cancel it first.`); start = cur.expiryDate+1; }
   const n = await dbIncrement('settings','main','nextMembershipNo'); const receiptNo = 'LVL-MEM-'+String(n).padStart(6,'0');
-  const start = Date.now(), months = Math.max(1, Math.round(Number(plan.durationMonths)||1));
-  const rec = { mobile:o.mobile, customerName:c.name, planId:plan.id, planName:plan.name, tier:plan.tier||plan.name, period:plan.period||'', durationMonths:months, price:Math.round(Number(plan.price)||0),
+  const months = Math.max(1, Math.round(Number(plan.durationMonths)||1)), price = Math.round(Number(plan.price)||0), now = Date.now();
+  const rec = { customerId:cid, mobile:c.mobile, customerName:c.name, planId:plan.id, planName:plan.name, tier:plan.tier||plan.name, period:plan.period||'', durationMonths:months, price,
     freeHours:Number(plan.freeHours)||0, gamingDiscount:Number(plan.gamingDiscount)||0, foodDiscount:Number(plan.foodDiscount)||0, birthdayHours:Number(plan.birthdayHours)||0, benefits:plan.benefits||'',
-    startDate:start, expiryDate:endOfDay(addMonths(start,months)-864e5), payment:{ method:o.method, amount:Math.round(Number(plan.price)||0), date:start }, receiptNo, usage:[], createdAt:start, createdBy:'Admin' };
+    startDate:start, expiryDate:endOfDay(addMonths(start,months)-864e5), payment:{ method:comp?'Complimentary':o.method, amount:comp?0:price, listPrice:price, date:now }, complimentary:comp, complimentaryReason:comp?String(o.reason).trim():'',
+    receiptNo, usage:[], createdAt:now, createdBy:'Admin', renewal:!!cur, createdCustomer:created };
   await createRecord('memberships', rec);
-  try{ await creditAccount(o.method, rec.payment.amount); }catch(e){ console.error('membership payment not posted to account', e); }
-  return rec;
+  const desc = `${rec.period} ${rec.planName} membership ${receiptNo}${created?' (new customer)':''}`;
+  const led = await ledgerPost({ type:comp?'membership_complimentary':'membership_purchase', customerId:cid, mobile:c.mobile, membershipId:rec.id, amount:rec.payment.amount, description:desc+(comp?'':` paid by ${o.method}`), reason:comp?rec.complimentaryReason:'' , meta:{ listPrice:price, method:rec.payment.method } });
+  await ledgerPost({ type:'membership_activation', customerId:cid, mobile:c.mobile, membershipId:rec.id, hours:rec.freeHours, originalRef:led.id, description:`Activated ${fdate(start)} → ${fdate(rec.expiryDate)} — ${rnd2(rec.freeHours)}h free hours` });
+  if(!comp){ try{ await creditAccount(o.method, rec.payment.amount); }catch(e){ console.error('membership payment not posted to account', e); } }
+  rec.customer = c; return rec;
 }
 async function membershipCancel(id, reason){
   if(!needAdmin()) return; const m=await dbGet('memberships',id); if(!m) return;
   m.cancelledAt=Date.now(); m.cancelReason=reason||''; await dbPut('memberships',m);
+  await ledgerPost({ type:'membership_cancel', customerId:m.customerId||'', mobile:m.mobile, membershipId:m.id, description:`Membership ${m.receiptNo} cancelled`, reason:reason||'' });
 }
 /* THE benefit calculation — one pure function used by the checkout screen and by the invoice engine, so they can never disagree.
    f: { discountPct, memOn, memOwner:{lineId:true}, redeemPts }.  Free hours are measured in the OWNER's own minutes:
@@ -2656,9 +2707,14 @@ function benefitPlan(lines, f, settings, mem, acct, fin){
 }
 /* Called by the invoice engine right after the invoice exists. */
 async function applyBenefitsToInvoice(inv, plan, mobile){
-  if(plan.memOn && plan.mem && plan.freeMin>0){
+  if(plan.memOn && plan.mem){
     const m=await dbGet('memberships', plan.mem.id);
-    if(m){ m.usage=m.usage||[]; m.usage.push({ id:Date.now()+'-'+m.usage.length, ts:Date.now(), invoiceId:inv.id, invoiceNumber:inv.number, minutes:plan.freeMin, lines:plan.items.filter(i=>i.freeMin>0).map(i=>({ lineId:i.lineId, name:i.name, minutes:i.freeMin, players:i.players })), note:'Free gaming hours used (owner\'s own time only)' }); await dbPut('memberships', m); }
+    if(m && plan.freeMin>0){
+      const led = await ledgerPost({ type:'membership_hours_used', customerId:m.customerId||inv.customerId||'', mobile:m.mobile, invoiceId:inv.id, invoiceNumber:inv.number, membershipId:m.id, hours:-rnd2(plan.freeMin/60), amount:inv.memFree||0, description:`Free gaming hours used on ${inv.number}` });
+      m.usage=m.usage||[]; m.usage.push({ id:Date.now()+'-'+m.usage.length, ts:Date.now(), invoiceId:inv.id, invoiceNumber:inv.number, kind:'free', minutes:plan.freeMin, ledgerRef:led.id, lines:plan.items.filter(i=>i.freeMin>0).map(i=>({ lineId:i.lineId, name:i.name, minutes:i.freeMin, players:i.players })), note:'Free gaming hours used (owner\'s own time only)' }); await dbPut('memberships', m);
+    }
+    const disc=(inv.memDisc||0)+(inv.memFood||0);
+    if(m && disc>0) await ledgerPost({ type:'membership_discount', customerId:m.customerId||inv.customerId||'', mobile:m.mobile, invoiceId:inv.id, invoiceNumber:inv.number, membershipId:m.id, amount:disc, description:`Member discount on ${inv.number}`, meta:{ gaming:inv.memDisc||0, food:inv.memFood||0 } });
   }
   if(mobile && plan.loyaltyPts>0) await loyaltyPost(mobile,'redeem',-plan.loyaltyPts,inv,`Redeemed on ${inv.number} (${fmt(plan.loyaltyValue)} off)`);
   await loyaltyAward(inv);
@@ -2715,10 +2771,10 @@ function ckRedeemMax(){ const b=state.ckBen||{}; if(!b.acct) return; state.ckFor
 async function screenCustomerProfile(){
   const c = await dbGet('customers', state.custProfile);
   if(!c) return `<div class="empty">Customer not found.</div>`;
-  const invoices = []; for(const id of c.invoiceIds){ const inv = await dbGet('invoices', id); if(inv) invoices.push(inv); }
+  const invoices = []; for(const id of c.invoiceIds){ const inv = await getInvoiceAny(id); if(inv) invoices.push(inv); }
   await loyaltyExpireSweep(c.mobile).catch(()=>{});
   const acct = await loyaltyAccount(c.mobile), cfg=acct.cfg;
-  const mems = (await dbAll('memberships')).filter(m=>m.mobile===c.mobile).sort((a,b)=>b.startDate-a.startDate);
+  const mems = (await dbAll('memberships')).filter(m=>belongsTo(m,c,c.mobile)).sort((a,b)=>b.startDate-a.startDate);
   const cur = mems.find(m=>memStatus(m)==='Active');
   const memSpend = mems.reduce((z,m)=>z+(m.payment?m.payment.amount:0),0);
   const usage = mems.flatMap(m=>(m.usage||[]).map(u=>({ ...u, plan:m.planName, period:m.period }))).sort((a,b)=>b.ts-a.ts);
@@ -2743,7 +2799,7 @@ async function screenCustomerProfile(){
     ${acct.txs.length?`<div class="muted" style="font-size:11px;margin-top:10px;text-transform:uppercase">Loyalty transactions</div>`+acct.txs.slice().reverse().slice(0,50).map(t=>`<div class="list-item"><span>${esc(t.invoiceNumber||'—')} · ${esc(t.type.replace('_',' '))}<br><span class="muted" style="font-size:12px">${fdt(t.ts)} · ${esc(t.note||'')}</span></span><span style="text-align:right"><b style="color:${t.points>=0?'var(--ok,#4fb286)':'var(--amber)'}">${t.points>0?'+':''}${fpts(t.points)}</b><br><span class="muted" style="font-size:11px">Balance ${fpts(t.balanceAfter)}</span></span></div>`).join(''):'<div class="muted" style="margin-top:6px">No loyalty activity yet.</div>'}</div>`;
   return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('customers')">← Back</button>
   <h2>${esc(c.name)} ${cur?tierBadge(cur.tier):''}</h2>
-  <div class="muted" style="margin:-6px 0 8px">${fmtMobile(c.mobile)}</div>
+  <div class="muted" style="margin:-6px 0 8px">${fmtMobile(c.mobile)}${c.cid?' · ID '+esc(c.cid):''}</div>${isAdmin()?`<button class="btn sm" style="margin-bottom:8px" onclick="customerEditModal('${c.mobile}')">Edit customer</button>`:''}
   <div class="card"><div class="grid2">
       <div class="stat"><div class="v">${c.visits}</div><div class="l">Visits</div></div>
       <div class="stat"><div class="v">${c.gamingHours.toFixed(1)}h</div><div class="l">Gaming Hours</div></div>
@@ -2754,28 +2810,9 @@ async function screenCustomerProfile(){
   </div></div>
   ${memHtml}${loyHtml}
   <div class="section-title">Invoice History</div>
-  ${invoices.map(i=>`<div class="list-item"><span>${i.number}</span><span>${fmt(i.grandTotal)}</span></div>`).join('') || '<div class="muted">No invoices.</div>'}`;
+  ${invoices.map(i=>`<div class="list-item" style="cursor:pointer" onclick="${i.archived?`archivedInvoiceModal(${i.id})`:`openInvoice(${i.id})`}"><span>${i.number}${i.archived?' <span class="pill">Archived</span>':''}</span><span>${fmt(i.grandTotal)}</span></div>`).join('') || '<div class="muted">No invoices.</div>'}`;
 }
 
-/* ---------- Membership screen: members, plans, sell ---------- */
-async function screenMembership(){
-  const A = state.mem = state.mem || { tab:'members', q:'' };
-  const all = (await dbAll('memberships')).sort((a,b)=>b.startDate-a.startDate);
-  const tabs=[['members','Members'],['plans','Plans & settings']].map(([k,l])=>`<span class="chip ${A.tab===k?'sel':''}" onclick="state.mem.tab='${k}';render()">${l}</span>`).join('');
-  let body='';
-  if(A.tab==='plans'){
-    const rows=memPlans().map(p=>`<div class="card" style="cursor:pointer" onclick="${isAdmin()?`membershipPlanModal('${p.id}')`:`tell('Only an administrator can edit plans.')`}"><div class="list-item"><span>${tierBadge(p.tier,p.period)} <b>${esc(p.name)}</b> ${p.active===false?'<span class="pill amber">off</span>':''}<br><span class="muted" style="font-size:12px">${p.freeHours?rnd2(p.freeHours)+'h free · ':''}${p.gamingDiscount}% gaming${p.foodDiscount?` · ${p.foodDiscount}% snacks`:''} · ${p.durationMonths} month${p.durationMonths>1?'s':''}</span></span><b>${fmt(p.price)}</b></div><div class="muted" style="font-size:12px">${esc(p.benefits||'')}</div></div>`).join('');
-    body=`${isAdmin()?`<button class="btn primary" style="margin-bottom:8px" onclick="membershipPlanModal('')">+ New plan</button>`:''}${rows}<div class="card"><b>Rules</b><div class="muted" style="font-size:12px;margin-top:4px">${MEM_RULES.map(r=>'• '+r).join('<br>')}</div></div>`;
-  } else {
-    const q=(A.q||'').toLowerCase(); const list=all.filter(m=>!q||(m.customerName+' '+m.mobile+' '+m.planName+' '+m.receiptNo).toLowerCase().includes(q));
-    const act=all.filter(m=>memStatus(m)==='Active').length;
-    body=`${isAdmin()?`<button class="btn primary" style="margin-bottom:8px" onclick="membershipSellModal('')">Sell / assign membership</button>`:''}
-      <div class="card"><div class="grid2"><div class="stat"><div class="v">${act}</div><div class="l">Active members</div></div><div class="stat"><div class="v">${all.length-act}</div><div class="l">Expired / cancelled</div></div></div></div>
-      <input id="memQ" placeholder="Search name, mobile, plan or receipt" value="${esc(A.q)}" oninput="state.mem.q=this.value;render()" style="margin-bottom:8px">
-      ${list.map(m=>`<div class="card" style="cursor:pointer" onclick="state.custProfile='${m.mobile}';go('customerProfile')"><div class="list-item"><span>${tierBadge(m.tier,m.period)} <b>${esc(m.customerName)}</b><br><span class="muted" style="font-size:12px">${fmtMobile(m.mobile)} · till ${fdate(m.expiryDate)} · ${memHours(memRemainMin(m))} of ${rnd2(m.freeHours)}h left</span></span><span style="text-align:right"><span class="pill ${memStatus(m)==='Active'?'green':'amber'}">${memStatus(m)}</span><br><span class="muted" style="font-size:11px">${esc(m.receiptNo)}</span></span></div></div>`).join('')||'<div class="empty">No memberships yet.</div>'}`;
-  }
-  return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('more')">← Back</button><h2>Membership</h2><div style="margin-bottom:8px">${tabs}</div>${body}`;
-}
 function membershipPlanModal(id){
   if(!needAdmin()) return; const p = memPlans().find(x=>x.id===id) || { id:'', name:'', tier:'Bronze', period:'Monthly', price:0, durationMonths:1, freeHours:0, gamingDiscount:0, foodDiscount:0, birthdayHours:0, benefits:'', active:true };
   const f=(k,l,t,extra)=>`<div><label>${l}</label><input id="pl_${k}" ${t||''} value="${esc(p[k])}" ${extra||''}></div>`;
@@ -2797,54 +2834,553 @@ async function membershipPlanSave(id){
   const plans=memPlans().map(p=>({...p})); const i=plans.findIndex(p=>p.id===rec.id); if(i>=0) plans[i]=rec; else plans.push(rec);
   await patchSettings({ membershipPlans:plans }); closeModal(); showToast('Plan saved'); render();
 }
-function membershipSellModal(mobile){
-  if(!needAdmin()) return;
-  const plans=memPlans().filter(p=>p.active!==false);
-  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Sell / assign membership</h3>
-    <p class="muted" style="font-size:12px">For an existing customer. Non-transferable — the plan and free hours belong to this customer only.</p>
-    <label>Customer name</label><input id="msName" placeholder="Start typing a saved customer" autocomplete="off">
-    <label>Mobile number</label><input id="msMobile" inputmode="numeric" placeholder="10-digit mobile" value="${esc(mobile||'')}" autocomplete="off">
-    <div id="msNote" style="font-size:12px;margin-top:4px"></div>
-    <label>Plan</label><select id="msPlan" onchange="membershipSellInfo()">${plans.map(p=>`<option value="${p.id}">${esc(p.period)} ${esc(p.name)} — ${fmt(p.price)}</option>`).join('')}</select>
-    <div class="muted" style="font-size:12px;margin:4px 0" id="msInfo"></div>
-    <label>Payment received by</label><select id="msPay">${PAY_METHODS.map(m=>`<option>${m}</option>`).join('')}</select>
-    <button class="btn primary" style="margin-top:10px" id="msGo" onclick="membershipSellConfirm()">Record payment &amp; activate</button>`);
-  const fill=c=>{ document.getElementById('msName').value=c.name; document.getElementById('msMobile').value=c.mobile; membershipSellInfo(); };
-  attachCustomerSuggest(document.getElementById('msName'),'name',fill); attachCustomerSuggest(document.getElementById('msMobile'),'mobile',fill);
-  document.getElementById('msMobile').addEventListener('input',membershipSellInfo);
-  if(mobile) dbGet('customers',mobile).then(c=>{ if(c) fill(c); }); else membershipSellInfo();
-}
-async function membershipSellInfo(){
-  const mob=normMobile(document.getElementById('msMobile').value.trim()), p=memPlans().find(x=>x.id===document.getElementById('msPlan').value);
-  const i=document.getElementById('msInfo'); if(i&&p) i.textContent=`${p.freeHours?rnd2(p.freeHours)+' free hours · ':''}${p.gamingDiscount}% gaming${p.foodDiscount?` · ${p.foodDiscount}% snacks & drinks`:''} · valid ${p.durationMonths} month${p.durationMonths>1?'s':''}. ${p.benefits||''}`;
-  const n=document.getElementById('msNote'); if(!n) return;
-  if(!mob){ n.innerHTML=''; return; }
-  const c=await dbGet('customers',mob); const cur=c?await activeMembership(mob):null;
-  n.innerHTML = !c ? '<span class="pill red">Not a saved customer</span>' : cur ? `<span class="pill amber">Already has an active ${esc(cur.planName)} membership till ${fdate(cur.expiryDate)}</span>` : `<span class="pill green">${esc(c.name)} ✓</span>`;
-}
-async function membershipSellConfirm(){
-  const btn=document.getElementById('msGo'); if(btn.disabled) return; btn.disabled=true;
-  try{
-    const mob=normMobile(document.getElementById('msMobile').value.trim()); if(!mob){ tell('Enter the customer\'s 10-digit mobile number.'); return; }
-    const rec=await membershipPurchase({ mobile:mob, planId:document.getElementById('msPlan').value, method:document.getElementById('msPay').value });
-    closeModal(); showToast('Membership activated'); membershipReceipt(rec.id); render();
-  }catch(e){ tell(e.message||String(e)); } finally{ btn.disabled=false; }
-}
-async function membershipReceipt(id){
-  const m=await dbGet('memberships',id); if(!m) return; const st=state.settings;
-  const text=`*${st.businessName||'LVL Gaming Café'}* — Membership receipt ${m.receiptNo}\n${m.customerName} (${m.mobile})\n${m.period} ${m.planName}: ${fmt(m.payment.amount)} paid by ${m.payment.method}\nValid ${fdate(m.startDate)} to ${fdate(m.expiryDate)}\nFree hours: ${rnd2(m.freeHours)}h · Gaming ${m.gamingDiscount}% off`;
-  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Membership receipt</h3>
-    <div class="card" style="text-align:left"><b>${esc(st.businessName||'')}</b><div class="muted" style="font-size:12px">Receipt ${esc(m.receiptNo)} · ${fdt(m.payment.date)}</div>
-    <table style="margin-top:8px"><tr><td>Customer</td><td class="right">${esc(m.customerName)}<br>${fmtMobile(m.mobile)}</td></tr><tr><td>Plan</td><td class="right">${tierBadge(m.tier,m.period)} ${esc(m.planName)}</td></tr>
-    <tr><td>Activated</td><td class="right">${fdate(m.startDate)}</td></tr><tr><td>Expires</td><td class="right">${fdate(m.expiryDate)}</td></tr>
-    <tr><td>Free hours</td><td class="right">${rnd2(m.freeHours)}h</td></tr><tr><td>Gaming / snacks discount</td><td class="right">${m.gamingDiscount}% / ${m.foodDiscount}%</td></tr>
-    <tr><td>Paid by</td><td class="right">${esc(m.payment.method)}</td></tr><tr class="total-row"><td>Amount paid</td><td class="right">${fmt(m.payment.amount)}</td></tr></table>
-    <div class="muted" style="font-size:12px;margin-top:6px">${esc(m.benefits||'')}</div><div class="muted" style="font-size:11px;margin-top:6px">${MEM_RULES.join(' ')}</div></div>
-    <a class="btn" style="display:block;text-align:center;margin-top:8px" target="_blank" rel="noopener" href="https://wa.me/91${m.mobile}?text=${encodeURIComponent(text)}">Send on WhatsApp</a>`);
-}
 function membershipCancelModal(id){ if(!needAdmin()) return;
   openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Cancel membership?</h3><p class="muted" style="font-size:13px">Remaining free hours and discounts stop immediately. The payment is not refunded automatically.</p><label>Reason</label><input id="mcReason" placeholder="Optional"><button class="btn danger" style="margin-top:10px" onclick="membershipCancelDo(${id})">Cancel membership</button>`); }
 async function membershipCancelDo(id){ await membershipCancel(id, document.getElementById('mcReason').value.trim()); closeModal(); showToast('Membership cancelled'); render(); }
+
+/* ============================================================================
+   v13 — Lifetime data integrity
+   • SCHEMA_VERSION + migrations      • stable customer IDs (cid) that survive name / mobile changes
+   • append-only financial LEDGER      • invoice ARCHIVE (separate, indexed, paginated collection)
+   • all-or-nothing batch writes       • Admin Data Integrity Check with audited repairs
+   Cloud database = Firestore (one document per record, saved on the phone in IndexedDB by the Firestore SDK, so everything works offline).
+   'ledger' and 'archivedInvoices' are NOT mirrored into memory: they are read on demand with indexed, paginated queries.
+   ============================================================================ */
+const SCHEMA_VERSION = 13;
+function hash32(str, seed){ let h = (seed===undefined?0x811c9dc5:seed)>>>0; for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619)>>>0; } return h>>>0; }
+const hex8 = n=>('00000000'+(n>>>0).toString(16)).slice(-8);
+function cidForMobile(mobile){ const s=String(mobile); return 'C-'+hex8(hash32(s)).toUpperCase()+hex8(hash32(s,0x9747b28c)).toUpperCase(); }   // deterministic: two phones migrating the same customer produce the same ID
+function newCid(){ return 'C-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,8).toUpperCase(); }   // brand-new customers: random, never reused
+async function customerByCid(cid){ if(!cid) return null; return (await dbAll('customers')).find(c=>c.cid===cid)||null; }
+async function ensureCid(c){ if(c && !c.cid){ c.cid = cidForMobile(c.mobile); await dbPut('customers', c); } return c ? c.cid : ''; }
+async function cidOfMobile(mob){ if(!mob) return ''; const c = await dbGet('customers', mob); return c ? ensureCid(c) : ''; }
+function belongsTo(rec, c, mobile){ return (c && c.cid && rec.customerId) ? rec.customerId===c.cid : (rec.mobile||rec.customerMobile)===mobile; }
+async function invMobile(inv){   // the customer's CURRENT mobile (it may have changed since the invoice was made)
+  if(inv.customerId){ const c = await customerByCid(inv.customerId); if(c) return c.mobile; }
+  return inv.customerMobile||'';
+}
+
+/* ---------- all-or-nothing writes ---------- */
+async function dbBatch(ops){   // ops: [{put:[store,val]} | {del:[store,key]}] — one Firestore batch: every change is saved or none is
+  const f = fb(); const b = f.writeBatch(f.db);
+  const prepared = ops.map(o=>{ if(o.put){ const [store,val]=o.put, kp=KEYPATH[store]||'id'; if(val[kp]===undefined||val[kp]===null) throw new Error('A batched record has no ID.'); return { store, key:String(val[kp]), data:clean(val) }; } const [store,key]=o.del; return { store, key:String(key), del:true }; });
+  prepared.forEach(p=>{ const ref=f.doc(f.db,p.store,p.key); if(p.del) b.delete(ref); else b.set(ref,p.data); });
+  await writeAck(b.commit());
+  prepared.forEach(p=>{ if(__ready[p.store]){ if(p.del) __cache[p.store].delete(p.key); else __cache[p.store].set(p.key, clean(p.data)); } });
+}
+
+/* ---------- the append-only ledger ---------- */
+function ledgerId(){ return 'TX-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,8).toUpperCase(); }
+function ledgerRow(e, id){
+  const row = Object.assign({ ts:Date.now(), type:'', customerId:'', mobile:'', invoiceId:null, invoiceNumber:'', membershipId:null, amount:0, points:0, hours:0, originalRef:null, reversalRef:null, description:'', reason:'', by:isAdmin()?'Admin':'Staff', schema:SCHEMA_VERSION }, e);
+  row.id = id || ledgerId(); row.txId = row.id; return row;
+}
+async function ledgerPost(e, fixedId){
+  const row = ledgerRow(e, fixedId);
+  try{ await dbPut('ledger', row); }catch(err){ console.error('ledger write failed', err); try{ showToast('⚠️ A ledger entry could not be saved'); }catch(_){} }
+  return row;
+}
+async function ledgerQuery(field, value){   // indexed equality query (Firestore single-field index) — never loads the whole ledger
+  const f = fb(); const snap = await f.getDocs(f.query(f.collection(f.db,'ledger'), f.where(field,'==',value)));
+  return snap.docs.map(d=>d.data()).sort((a,b)=>a.ts-b.ts||String(a.id).localeCompare(String(b.id)));
+}
+const LEDGER_LABEL = { invoice_create:'Invoice created', invoice_payment:'Payment received', invoice_credit:'Credit note', invoice_refund:'Refund', invoice_archive:'Invoice archived', invoice_unarchive:'Invoice un-archived', invoice_delete:'Invoice deleted', invoice_payment_reversal:'Payment reversed', invoice_restore:'Invoice restored', invoice_purge:'Invoice permanently removed',
+  loyalty_earn:'Points earned', loyalty_redeem:'Points redeemed', loyalty_reverse_earn:'Points earned — reversed', loyalty_reverse_redeem:'Points redeemed — returned', loyalty_expire:'Points expired',
+  membership_purchase:'Membership purchase', membership_complimentary:'Complimentary membership', membership_activation:'Membership activated', membership_cancel:'Membership cancelled', membership_hours_used:'Free hours used', membership_hours_restored:'Free hours restored', membership_discount:'Member discount given', membership_discount_reversed:'Member discount reversed',
+  adjustment:'Adjustment', customer_update:'Customer details changed', restore:'Backup restored', migration:'Schema migration' };
+
+/* ---------- customers ---------- */
+async function customerCreate(o){
+  const mob = normMobile(String(o.mobile||'').trim()); if(!mob) throw new Error('Enter a valid 10-digit mobile number.');
+  const name = String(o.name||'').trim(); if(!name) throw new Error("Enter the customer's name.");
+  const ex = await dbGet('customers', mob);   // one mobile = one customer: never create a second record
+  if(ex){ await ensureCid(ex); return { customer:ex, existed:true }; }
+  const now = new Date().toISOString();
+  const c = { mobile:mob, cid:newCid(), name, email:String(o.email||'').trim(), address:String(o.address||'').trim(), birthday:o.birthday||'', notes:String(o.notes||'').trim(), joined:now, visits:0, gamingSessions:0, gamingHours:0, gamingSpend:0, foodSpend:0, totalSpend:0, lastVisit:now, invoiceIds:[] };
+  await dbPut('customers', c); return { customer:c, existed:false };
+}
+async function customerUpdate(cid, o){
+  if(!isAdmin()) throw new Error('Only an administrator can change customer details.');
+  const c = await customerByCid(cid); if(!c) throw new Error('Customer not found.');
+  const name = String(o.name===undefined?c.name:o.name).trim(); if(!name) throw new Error("Enter the customer's name.");
+  const newMob = o.mobile===undefined ? c.mobile : normMobile(String(o.mobile).trim()); if(!newMob) throw new Error('Enter a valid 10-digit mobile number.');
+  const before = { name:c.name, mobile:c.mobile };
+  const upd = Object.assign({}, c, { name, email:o.email===undefined?c.email:String(o.email).trim(), address:o.address===undefined?c.address:String(o.address).trim(), birthday:o.birthday===undefined?c.birthday:o.birthday, notes:o.notes===undefined?c.notes:String(o.notes).trim() });
+  const old = c.mobile;
+  if(newMob!==old){
+    if(await dbGet('customers', newMob)) throw new Error('Another customer already uses that mobile number. Open that customer instead — customers are never merged automatically.');
+    upd.mobile = newMob; upd.previousMobiles = [...(c.previousMobiles||[]), old];
+    await dbBatch([{ put:['customers',upd] }, { del:['customers',old] }]);   // atomic: the customer is never missing and never duplicated
+  } else await dbPut('customers', upd);
+  // re-point the copies of name / mobile kept on linked records (the permanent link is the customer ID, so nothing is ever orphaned)
+  for(const m of await dbAllFresh('memberships')){ if(m.customerId===cid || (!m.customerId && m.mobile===old)){ m.customerId=cid; m.mobile=newMob; m.customerName=name; await dbPut('memberships', m); } }
+  if(newMob!==old) for(const t of await dbAllFresh('loyaltyTx')){ if(t.customerId===cid || (!t.customerId && t.mobile===old)){ t.customerId=cid; t.mobile=newMob; await dbPut('loyaltyTx', t); } }
+  for(const s of (await dbAll('bsessions'))){ if(s.customerMobile===old && newMob!==old && isOpenStatus(s.status)){ await dbUpdate('bsessions', s.id, d=>{ d.customerMobile=newMob; if(name) d.customerName=name; return true; }); } }
+  if(before.name!==name || newMob!==old) await ledgerPost({ type:'customer_update', customerId:cid, mobile:newMob, description:`Customer details changed: ${before.name} (${before.mobile}) → ${name} (${newMob})`, reason:'Edited by admin' });
+  return upd;
+}
+
+/* ---------- archive helpers ---------- */
+async function getInvoiceAny(id){ const a = await dbGet('invoices', id); if(a) return a; return await dbGet('archivedInvoices', id); }
+const ARCHIVE_FIELDS = ['archivedAt','archivedBy','archiveReason','archived'];
+function stripArchive(rec){ const o = clean(rec); ARCHIVE_FIELDS.forEach(k=>delete o[k]); return o; }
+function invSnapshot(inv){ return { number:inv.number, date:inv.date, customerName:inv.customerName||'', customerMobile:inv.customerMobile||'', customerId:inv.customerId||'', grandTotal:inv.grandTotal, paid:invoicePaid(inv), gaming:(inv.gamingAmount||0)+(inv.accompanyAmount||0)+(inv.overtimeAmount||0), food:inv.foodAmount||0, discount:inv.discount||0, memFree:inv.memFree||0, memDisc:inv.memDisc||0, memFood:inv.memFood||0, loyaltyValue:inv.loyaltyValue||0, payments:(inv.payments||[]).map(p=>({ method:p.method, amount:p.amount, date:p.date })), sessionCode:inv.sessionCode||'', lines:(inv.lines||[]).length }; }
+
+async function archiveInvoicesCore(ids, o){
+  o = o||{}; await admAuthorize(o.pin);
+  const done = [], skipped = [];
+  if(!state.settings.hasArchive) await patchSettings({ hasArchive:true });   // set BEFORE the first move so reports always look in the archive too
+  for(const id of ids){
+    const inv = await dbGet('invoices', id);
+    if(!inv){ skipped.push({ id, why:'not found (already archived or deleted)' }); continue; }
+    if(invoiceBalance(inv)>0){ skipped.push({ id, number:inv.number, why:'balance still due' }); continue; }
+    if(inv.sessionId){ const s = await dbGet('bsessions', inv.sessionId); if(s && isOpenStatus(s.status)){ skipped.push({ id, number:inv.number, why:'its gaming session is still open' }); continue; } }
+    const cid = inv.customerId || await cidOfMobile(inv.customerMobile);
+    const rec = Object.assign(stripArchive(inv), { customerId:cid||'', archived:true, archivedAt:Date.now(), archivedBy:'Admin', archiveReason:o.reason||'Archived', schema:SCHEMA_VERSION });
+    const led = ledgerRow({ type:'invoice_archive', customerId:cid||'', mobile:inv.customerMobile||'', invoiceId:inv.id, invoiceNumber:inv.number, amount:inv.grandTotal, description:`Archived ${inv.number}`, reason:o.reason||'Archived', meta:invSnapshot(inv) });
+    await dbBatch([{ put:['archivedInvoices',rec] }, { del:['invoices',inv.id] }, { put:['ledger',led] }]);   // one atomic step: copy to archive + remove from active + ledger entry
+    done.push(inv.id);
+  }
+  if(done.length){ try{ await createRecord('auditLog', { ts:Date.now(), action:'invoice_archive', invoiceId:null, number:`${done.length} invoice(s)`, amount:0, by:'Admin', reason:o.reason||'Archived', ids:done }); }catch(e){} }
+  return { done, skipped };
+}
+async function unarchiveInvoiceCore(id, o){
+  o = o||{}; await admAuthorize(o.pin);
+  const rec = await dbGet('archivedInvoices', id); if(!rec) throw new Error('Archived invoice not found.');
+  if(await dbGet('invoices', id)) throw new Error(`${rec.number} is already in the active list.`);
+  const inv = stripArchive(rec);
+  const led = ledgerRow({ type:'invoice_unarchive', customerId:rec.customerId||'', mobile:rec.customerMobile||'', invoiceId:rec.id, invoiceNumber:rec.number, amount:rec.grandTotal, description:`Un-archived ${rec.number}`, reason:o.reason||'Returned to the active list' });
+  await dbBatch([{ put:['invoices',inv] }, { del:['archivedInvoices',id] }, { put:['ledger',led] }]);
+  return inv;
+}
+async function archivedOnDay(dateStr){
+  if(!state.settings.hasArchive) return [];
+  const [y,m,d] = dateStr.split('-').map(Number); const t0 = new Date(y,m-1,d).getTime(), t1 = t0+864e5-1; const f = fb();
+  const snap = await f.getDocs(f.query(f.collection(f.db,'archivedInvoices'), f.where('date','>=',t0), f.where('date','<=',t1)));
+  return snap.docs.map(x=>x.data());
+}
+async function archivedSince(start){
+  if(!state.settings.hasArchive) return [];
+  const f = fb(); const snap = await f.getDocs(f.query(f.collection(f.db,'archivedInvoices'), f.where('date','>=',start)));
+  return snap.docs.map(x=>x.data());
+}
+
+/* ---------- schema migrations (idempotent; safe to run again after an interruption) ---------- */
+async function putMany(store, rows){ for(let i=0;i<rows.length;i+=400) await dbBatch(rows.slice(i,i+400).map(r=>({ put:[store,r] }))); }
+async function runMigrations(){
+  const st = (await dbGet('settings','main')) || state.settings; if(!st) return { ran:false };
+  const cur = Number(st.schemaVersion)||0; if(cur>=SCHEMA_VERSION) return { ran:false, from:cur };
+  const report = { from:cur, to:SCHEMA_VERSION, customers:0, linked:0, ledger:0 };
+  // 1) stable customer IDs
+  const custs = await dbAllFresh('customers'); const byMob = {};
+  const toFix = []; custs.forEach(c=>{ if(!c.cid){ c.cid = cidForMobile(c.mobile); toFix.push(c); } byMob[c.mobile] = c.cid; });
+  if(toFix.length){ await putMany('customers', toFix); report.customers = toFix.length; }
+  // 2) customerId on every linked record
+  const link = async(store, mobField)=>{ const rows = await dbAllFresh(store); const fix = rows.filter(r=>!r.customerId && r[mobField] && byMob[r[mobField]]); fix.forEach(r=>{ r.customerId = byMob[r[mobField]]; }); if(fix.length) await putMany(store, fix); report.linked += fix.length; return rows; };
+  const mems = await link('memberships','mobile'); const lts = await link('loyaltyTx','mobile'); const invs = await link('invoices','customerMobile');
+  const dels = await dbAllFresh('deletedInvoices'); const dfix = dels.filter(r=>!r.customerId && r.customerMobile && byMob[r.customerMobile]); dfix.forEach(r=>{ r.customerId = byMob[r.customerMobile]; if(r.invoice && !r.invoice.customerId) r.invoice.customerId = r.customerId; }); if(dfix.length) await putMany('deletedInvoices', dfix);
+  // 3) back-fill the ledger for everything that happened before v13 (fixed IDs, so a re-run or a second phone never duplicates)
+  const have = new Set((await dbAllFresh('ledger')).map(r=>r.id)); const out = [];
+  const add = (id, e)=>{ if(!have.has(id)){ have.add(id); out.push(ledgerRow(Object.assign({ by:'System', reason:'Back-filled when upgrading to v13' }, e), id)); } };
+  lts.forEach(t=>add('MIG-LT-'+t.id, { ts:t.ts, type:'loyalty_'+t.type, customerId:t.customerId||byMob[t.mobile]||'', mobile:t.mobile, invoiceId:t.invoiceId||null, invoiceNumber:t.invoiceNumber||'', points:t.points, description:t.note||'' }));
+  mems.forEach(m=>{
+    const cid = m.customerId||byMob[m.mobile]||''; const amt = m.payment?m.payment.amount:0;
+    add('MIG-MP-'+m.id, { ts:m.createdAt||m.startDate, type:amt>0?'membership_purchase':'membership_complimentary', customerId:cid, mobile:m.mobile, membershipId:m.id, amount:amt, description:`${m.period||''} ${m.planName||''} membership ${m.receiptNo||''}`.trim() });
+    add('MIG-MA-'+m.id, { ts:(m.createdAt||m.startDate)+1, type:'membership_activation', customerId:cid, mobile:m.mobile, membershipId:m.id, hours:Number(m.freeHours)||0, description:`Activated — ${rnd2(m.freeHours)}h free gaming hours` });
+    (m.usage||[]).forEach(u=>{ add('MIG-MU-'+m.id+'-'+u.id, { ts:u.ts, type:'membership_hours_used', customerId:cid, mobile:m.mobile, invoiceId:u.invoiceId||null, invoiceNumber:u.invoiceNumber||'', membershipId:m.id, hours:-rnd2(u.minutes/60), description:u.note||'Free gaming hours used' });
+      if(u.reversed) add('MIG-MR-'+m.id+'-'+u.id, { ts:u.ts+1, type:'membership_hours_restored', customerId:cid, mobile:m.mobile, invoiceId:u.invoiceId||null, invoiceNumber:u.invoiceNumber||'', membershipId:m.id, hours:rnd2(u.minutes/60), originalRef:'MIG-MU-'+m.id+'-'+u.id, description:u.reversedNote||'Invoice deleted — hours restored' }); });
+    if(m.cancelledAt) add('MIG-MC-'+m.id, { ts:m.cancelledAt, type:'membership_cancel', customerId:cid, mobile:m.mobile, membershipId:m.id, description:'Membership cancelled', reason:m.cancelReason||'' });
+  });
+  invs.forEach(i=>{
+    const cid = i.customerId||byMob[i.customerMobile]||'';
+    add('MIG-INV-'+i.id, { ts:i.date, type:'invoice_create', customerId:cid, mobile:i.customerMobile||'', invoiceId:i.id, invoiceNumber:i.number, amount:i.grandTotal, description:`Invoice ${i.number} created`, meta:invSnapshot(i) });
+    const pays = i.payments ? i.payments : (PAY_TO_ACCOUNT[i.paymentMethod] && i.grandTotal>0 ? [{ method:i.paymentMethod, amount:i.grandTotal, date:i.date }] : []);
+    pays.forEach((p,k)=>add('MIG-PAY-'+i.id+'-'+k, { ts:p.date||i.date, type:p.amount<0?'invoice_refund':'invoice_payment', customerId:cid, mobile:i.customerMobile||'', invoiceId:i.id, invoiceNumber:i.number, amount:p.amount, description:`${p.amount<0?'Refund':'Payment'} by ${p.method}`, meta:{ method:p.method } }));
+    (i.adjustments||[]).filter(a=>a.type==='credit').forEach((a,k)=>add('MIG-CR-'+i.id+'-'+k, { ts:a.date||i.date, type:'invoice_credit', customerId:cid, mobile:i.customerMobile||'', invoiceId:i.id, invoiceNumber:i.number, amount:a.amount, description:'Credit note', reason:a.reason||'' }));
+  });
+  dels.forEach(r=>add('MIG-DEL-'+r.id, { ts:r.deletedAt, type:'invoice_delete', customerId:r.customerId||byMob[r.customerMobile]||'', mobile:r.customerMobile||'', invoiceId:r.id, invoiceNumber:r.number, amount:r.amount, description:`Invoice ${r.number} deleted`, reason:r.reason||'', meta:r.invoice?invSnapshot(r.invoice):null }));
+  for(let i=0;i<out.length;i+=400) await dbBatch(out.slice(i,i+400).map(r=>({ put:['ledger',r] })));
+  report.ledger = out.length;
+  await patchSettings({ schemaVersion:SCHEMA_VERSION, migratedAt:Date.now() });
+  try{ await createRecord('auditLog', { ts:Date.now(), action:'schema_migration', invoiceId:null, number:`v${cur} → v${SCHEMA_VERSION}`, amount:0, by:'System', details:report }); }catch(e){}
+  return Object.assign({ ran:true }, report);
+}
+
+/* ============ Data Integrity Check ============ */
+/* Read-only scan. Every finding lists the affected IDs, a safe recommendation and — where a repair is safe — a button that needs the Admin PIN.
+   Repairs only ADD correcting entries or fix links/flags; suspicious financial records are never deleted. Every repair is audited. */
+let __integ = null;
+async function integrityScan(){
+  const names = ['invoices','archivedInvoices','deletedInvoices','bsessions','customers','memberships','loyaltyTx','ledger'];
+  const [inv, arc, del, ses, cus, mem, lts, led] = await Promise.all(names.map(dbAllFresh));
+  const issues = []; const add = (code, sev, title, items, recommend)=>{ if(items.length) issues.push({ code, sev, title, recommend, items }); };
+  const invIds = new Set([...inv.map(i=>i.id), ...arc.map(i=>i.id)]), delIds = new Set(del.map(r=>r.id)), purged = new Set(led.filter(l=>l.type==='invoice_purge').map(l=>l.invoiceId));
+  const known = id=>invIds.has(id)||delIds.has(id)||purged.has(id);
+  const cids = new Set(cus.map(c=>c.cid).filter(Boolean)), mobs = new Set(cus.map(c=>c.mobile));
+  const custOk = r=>r.customerId ? cids.has(r.customerId) : mobs.has(r.mobile||r.customerMobile);
+  // duplicate invoice numbers
+  const byNum = {}; [...inv, ...arc].forEach(i=>{ (byNum[i.number]=byNum[i.number]||[]).push(i); });
+  add('dup_number','error','Duplicate invoice numbers', Object.entries(byNum).filter(([,l])=>l.length>1).map(([n,l])=>({ ref:n, text:`${n} is used by invoice IDs ${l.map(x=>x.id).join(', ')}` })), 'Open each invoice and compare. Do not delete either one: issue a Credit note on the wrong one, or ask your accountant. Report only — nothing is changed automatically.');
+  // archived invoices still in the active list
+  const arcMap = new Map(arc.map(a=>[a.id,a]));
+  add('arch_active','error','Archived invoices also showing in the active list', inv.filter(i=>arcMap.has(i.id)).map(i=>{ const a=arcMap.get(i.id); const same = JSON.stringify(stripArchive(a))===JSON.stringify(stripArchive(i)) || (i.payments||[]).length===(a.payments||[]).length && i.grandTotal===a.grandTotal;
+    return { ref:i.number, text:`${i.number} (ID ${i.id}) exists in both the active list and the archive`, fix:same?{ kind:'drop_active_copy', id:i.id }:null, note:same?'':'The two copies differ — review manually.' }; }), 'Safe repair: remove the active copy (the archive copy keeps everything). Not offered when the two copies differ.');
+  // sessions
+  const stIdx = new Set(ses.filter(s=>isOpenStatus(s.status)).map(s=>s.id));
+  add('orphan_session','error','Gaming sessions linked to an invoice that does not exist', ses.filter(s=>s.invoiceId && !invIds.has(s.invoiceId) && !delIds.has(s.invoiceId)).map(s=>({ ref:sesCode(s), text:`Session ${sesCode(s)} points to missing invoice ID ${s.invoiceId}`, fix:{ kind:'session_unlink', id:s.id } })), 'Safe repair: unlink the session and reopen it so it can be billed again. Check that the customer was not already billed.');
+  add('orphan_session2','warn','Billed sessions with no invoice link', ses.filter(s=>['finalized','paid'].includes(s.status) && !s.invoiceId).map(s=>({ ref:sesCode(s), text:`Session ${sesCode(s)} is "${s.status}" but has no invoice`, fix:{ kind:'session_unlink', id:s.id } })), 'Safe repair: reopen the session so it can be billed.');
+  add('deleted_linked','error','Deleted invoices still linked to sessions', ses.filter(s=>s.invoiceId && delIds.has(s.invoiceId) && !invIds.has(s.invoiceId)).map(s=>({ ref:sesCode(s), text:`Session ${sesCode(s)} is still linked to deleted invoice ID ${s.invoiceId}`, fix:{ kind:'session_unlink', id:s.id } })), 'Safe repair: unlink the session (it is reopened for billing).');
+  // customers
+  const miss = []; const seen = new Set();
+  const noteMissing = (kind, r, mob, name)=>{ const k=(r.customerId||'')+'|'+mob; if(seen.has(k)) return; seen.add(k); miss.push({ ref:mob||r.customerId, text:`${kind} refers to customer ${r.customerId||''} ${mob?'('+mob+')':''} who does not exist`, fix:(mob?{ kind:'create_customer', mobile:mob, name:name||'Customer '+mob, cid:r.customerId||cidForMobile(mob) }:null) }); };
+  [...inv,...arc].forEach(i=>{ if(i.customerMobile && !custOk(i)) noteMissing('Invoice '+i.number, i, i.customerMobile, i.customerName); });
+  mem.forEach(m=>{ if(!custOk(m)) noteMissing('Membership '+(m.receiptNo||m.id), m, m.mobile, m.customerName); });
+  lts.forEach(t=>{ if(!custOk(t)) noteMissing('Loyalty transaction '+t.id, t, t.mobile, ''); });
+  add('missing_customer','error','References to customers that do not exist', miss, 'Safe repair: re-create the customer record from the information on the transaction (nothing else changes).');
+  // missing invoice references
+  const mref = [];
+  lts.forEach(t=>{ if(t.invoiceId && !known(t.invoiceId)) mref.push({ ref:'loyaltyTx '+t.id, text:`Loyalty transaction ${t.id} (${t.ledgerRef||'no ledger ref'}) refers to missing invoice ID ${t.invoiceId}` }); });
+  mem.forEach(m=>(m.usage||[]).forEach(u=>{ if(u.invoiceId && !known(u.invoiceId)) mref.push({ ref:'usage '+u.id, text:`Free-hours usage ${u.id} of membership ${m.receiptNo||m.id} refers to missing invoice ID ${u.invoiceId}` }); }));
+  led.forEach(l=>{ if(l.invoiceId && !known(l.invoiceId) && !String(l.type).startsWith('invoice_purge')) mref.push({ ref:l.id, text:`Ledger ${l.id} (${l.type}) refers to missing invoice ID ${l.invoiceId}` }); });
+  add('missing_invoice','error','Missing invoice references', mref, 'Report only. Find out whether the invoice was removed outside the app. Never delete the transaction — post an Adjustment instead if needed.');
+  // loyalty: running balance + duplicate awards + ledger drift
+  const byCust = {}; lts.forEach(t=>{ (byCust[t.customerId||t.mobile]=byCust[t.customerId||t.mobile]||[]).push(t); });
+  const lb = [];
+  Object.entries(byCust).forEach(([k,list])=>{ list.sort((a,b)=>a.ts-b.ts||(a.id-b.id)); let run=0; const bad=[]; list.forEach(t=>{ run=rnd2(run+t.points); if(Math.abs((t.balanceAfter||0)-run)>0.005) bad.push(t.id); });
+    if(bad.length) lb.push({ ref:k, text:`Customer ${k}: running balance is wrong on loyalty transactions ${bad.slice(0,8).join(', ')}${bad.length>8?'…':''} (true balance ${fpts(run)})`, fix:{ kind:'loyalty_rebalance', key:k } });
+    if(run<-0.005) lb.push({ ref:k+'-neg', text:`Customer ${k} has a NEGATIVE loyalty balance (${fpts(run)})` }); });
+  add('loyalty_balance','error','Loyalty balance mismatches', lb, 'Safe repair recalculates the running-balance column from the saved transactions. A negative balance needs a manual look.');
+  const dupE = []; const cfg = loyaltyCfg(); const allInv = new Map([...inv,...arc].map(i=>[i.id,i]));
+  const perInv = {}; lts.forEach(t=>{ if(t.invoiceId && (t.type==='earn'||t.type==='reverse_earn')) (perInv[t.invoiceId]=perInv[t.invoiceId]||[]).push(t); });
+  Object.entries(perInv).forEach(([id,list])=>{ const i=allInv.get(Number(id)); if(!i) return; const net=rnd2(list.reduce((z,t)=>z+t.points,0)); const exp=invoiceBalance(i)>0?0:loyaltyPointsFor(i.grandTotal-invoiceCredits(i), cfg); const afterCredits=Math.max(exp,0);
+    if(net>afterCredits+0.005 && list.filter(t=>t.type==='earn').length>1) dupE.push({ ref:id, text:`Invoice ${i.number}: points earned ${fpts(net)} but only ${fpts(afterCredits)} are due — duplicate award in loyalty transactions ${list.filter(t=>t.type==='earn').map(t=>t.id).join(', ')}`, fix:{ kind:'loyalty_dup_earn', invoiceId:i.id, excess:rnd2(net-afterCredits) } }); });
+  add('dup_earn','error','Duplicate loyalty awards', dupE, 'Safe repair posts one correcting "reverse earn" entry for the excess points. The original entries stay.');
+  const ledPts = {}; led.forEach(l=>{ if(String(l.type).startsWith('loyalty_')) ledPts[l.customerId||l.mobile] = rnd2((ledPts[l.customerId||l.mobile]||0)+l.points); });
+  const drift = []; Object.entries(byCust).forEach(([k,list])=>{ const s=rnd2(list.reduce((z,t)=>z+t.points,0)); const l=ledPts[k]||0; if(Math.abs(s-l)>0.005) drift.push({ ref:k, text:`Customer ${k}: loyalty rows total ${fpts(s)} points but the ledger totals ${fpts(l)}`, fix:{ kind:'ledger_adjust_points', key:k, delta:rnd2(s-l) } }); });
+  add('ledger_loyalty','warn','Loyalty ledger does not match loyalty balances', drift, 'Safe repair appends an Adjustment entry to the ledger so it agrees with the customer balance.');
+  // memberships: free hours
+  const hm = [], du = [];
+  const ledHrs = {}; led.forEach(l=>{ if(l.membershipId && (l.type==='membership_activation'||l.type==='membership_hours_used'||l.type==='membership_hours_restored')) ledHrs[l.membershipId]=rnd2((ledHrs[l.membershipId]||0)+l.hours); });
+  mem.forEach(m=>{
+    const used = memUsedMin(m)/60, cap = Number(m.freeHours)||0;
+    if(used>cap+0.01) hm.push({ ref:'over-'+m.id, text:`Membership ${m.receiptNo||m.id}: ${rnd2(used)}h used but the plan only includes ${rnd2(cap)}h` });
+    const expect = rnd2(cap-used), got = ledHrs[m.id]; if(got===undefined || Math.abs(expect-got)>0.01) hm.push({ ref:'led-'+m.id, text:`Membership ${m.receiptNo||m.id}: ${rnd2(expect)}h left by usage rows but the ledger shows ${got===undefined?'no entries':rnd2(got)+'h'}`, fix:{ kind:'ledger_adjust_hours', mid:m.id, delta:rnd2(expect-(got||0)) } });
+    const byI = {}; (m.usage||[]).filter(u=>!u.reversed).forEach(u=>{ (byI[u.invoiceId]=byI[u.invoiceId]||[]).push(u); });
+    Object.entries(byI).forEach(([iid,l])=>{ if(l.length>1){ const sig = {}; l.forEach(u=>{ const k=u.minutes+'|'+JSON.stringify((u.lines||[]).map(x=>x.lineId)); (sig[k]=sig[k]||[]).push(u); });
+      Object.values(sig).forEach(g=>{ if(g.length>1) g.slice(1).forEach(u=>du.push({ ref:'dup-'+u.id, text:`Membership ${m.receiptNo||m.id}: usage ${u.id} duplicates ${g[0].id} on invoice ${u.invoiceNumber||iid} (${fmtDur(u.minutes)})`, fix:{ kind:'usage_dup', mid:m.id, uid:u.id } })); }); } });
+  });
+  add('hours_balance','error','Membership free-hour balance mismatches', hm, 'Safe repair appends an Adjustment entry so the ledger agrees with the usage history. Over-usage needs a manual look.');
+  add('dup_usage','error','Duplicate membership usage transactions', du, 'Safe repair marks the duplicate as reversed and restores its hours (the entry itself is kept).');
+  // payments
+  const pm = []; [...inv,...arc].forEach(i=>{ const bal=invoiceBalance(i); const paidFlag=i.status==='paid';
+    if(bal<0) pm.push({ ref:i.number, text:`${i.number}: paid ${fmt(invoicePaid(i))} but the invoice (after credits) is only ${fmt(i.grandTotal-invoiceCredits(i))}` });
+    else if(paidFlag && bal>0) pm.push({ ref:i.number, text:`${i.number}: marked paid but ${fmt(bal)} is still owed`, fix:{ kind:'invoice_status', id:i.id, store:arcMap.has(i.id)&&!inv.some(x=>x.id===i.id)?'archivedInvoices':'invoices' } });
+    else if(!paidFlag && bal<=0 && i.status!=='paid' && i.status!==undefined) pm.push({ ref:i.number, text:`${i.number}: nothing is owed but it is not marked paid`, fix:{ kind:'invoice_status', id:i.id, store:arcMap.has(i.id)&&!inv.some(x=>x.id===i.id)?'archivedInvoices':'invoices' } });
+    const lp = led.filter(l=>l.invoiceId===i.id && (l.type==='invoice_payment'||l.type==='invoice_refund')).reduce((z,l)=>z+l.amount,0);
+    if(led.some(l=>l.invoiceId===i.id) && Math.abs(lp-invoicePaid(i))>0.5) pm.push({ ref:i.number+'-led', text:`${i.number}: payments on the invoice ${fmt(invoicePaid(i))} ≠ payments in the ledger ${fmt(lp)}` });
+  });
+  add('payment_total','error','Payment totals that do not match invoice totals', pm, 'Status flags can be repaired safely. For amount differences compare the invoice with the ledger and post a Credit/Refund or Adjustment — never edit or delete the payment.');
+  const order = { error:0, warn:1 }; issues.sort((a,b)=>order[a.sev]-order[b.sev]);
+  let n = 0; issues.forEach(g=>g.items.forEach(it=>{ it.idx = n++; }));
+  return { at:Date.now(), counts:{ invoices:inv.length, archived:arc.length, deleted:del.length, sessions:ses.length, customers:cus.length, memberships:mem.length, loyalty:lts.length, ledger:led.length }, issues };
+}
+/* Repairs: Admin + PIN. Each one only appends correcting records or fixes a link / flag, and writes an audit-log row. */
+async function integrityRepairCore(fix, o){
+  o = o||{}; await admAuthorize(o.pin); const audit = async(extra)=>{ await createRecord('auditLog', Object.assign({ ts:Date.now(), action:'integrity_repair', invoiceId:null, number:fix.kind, amount:0, by:'Admin' }, extra)); };
+  switch(fix.kind){
+    case 'loyalty_rebalance': {
+      const rows = (await dbAllFresh('loyaltyTx')).filter(t=>(t.customerId||t.mobile)===fix.key).sort((a,b)=>a.ts-b.ts||(a.id-b.id)); let run=0; const ch=[];
+      rows.forEach(t=>{ run=rnd2(run+t.points); if(Math.abs((t.balanceAfter||0)-run)>0.005){ ch.push({ id:t.id, was:t.balanceAfter, now:run }); t.balanceAfter=run; } });
+      for(const t of rows) if(ch.some(c=>c.id===t.id)) await dbPut('loyaltyTx', t);
+      await audit({ reason:'Loyalty running balances recalculated', details:{ customer:fix.key, changed:ch } }); return `Recalculated ${ch.length} running balance(s).`; }
+    case 'loyalty_dup_earn': {
+      const i = await getInvoiceAny(fix.invoiceId); const mob = i ? await invMobile(i) : ''; if(!i||!mob) throw new Error('Invoice or customer not found.');
+      const orig = (await dbAllFresh('loyaltyTx')).filter(t=>t.invoiceId===i.id && t.type==='earn').pop();
+      const r = await loyaltyPost(mob,'reverse_earn',-fix.excess,i,`Integrity repair: duplicate award on ${i.number}`,{ originalRef:orig?orig.ledgerRef:null, reason:'Integrity repair' });
+      await audit({ reason:'Duplicate loyalty award corrected', details:{ invoice:i.number, excess:fix.excess, loyaltyTx:r.id } }); return `Reversed ${fpts(fix.excess)} duplicate point(s).`; }
+    case 'ledger_adjust_points': {
+      const c = (await dbAllFresh('customers')).find(x=>x.cid===fix.key||x.mobile===fix.key);
+      const e = await ledgerPost({ type:'adjustment', customerId:c?c.cid:(String(fix.key).startsWith('C-')?fix.key:''), mobile:c?c.mobile:'', points:fix.delta, description:'Integrity repair: ledger brought in line with loyalty balance', reason:'Integrity repair' });
+      await audit({ reason:'Ledger adjustment (points)', details:{ customer:fix.key, points:fix.delta, ledger:e.id } }); return `Ledger adjusted by ${fpts(fix.delta)} point(s).`; }
+    case 'ledger_adjust_hours': {
+      const m = await dbGet('memberships', fix.mid); if(!m) throw new Error('Membership not found.');
+      const e = await ledgerPost({ type:'adjustment', customerId:m.customerId||'', mobile:m.mobile, membershipId:m.id, hours:fix.delta, description:'Integrity repair: ledger brought in line with free-hour usage', reason:'Integrity repair' });
+      await audit({ reason:'Ledger adjustment (hours)', details:{ membership:m.id, hours:fix.delta, ledger:e.id } }); return `Ledger adjusted by ${rnd2(fix.delta)}h.`; }
+    case 'usage_dup': {
+      const m = await dbGet('memberships', fix.mid); const u = m && (m.usage||[]).find(x=>x.id===fix.uid); if(!m||!u) throw new Error('Usage entry not found.'); if(u.reversed) return 'Already reversed.';
+      const e = await ledgerPost({ type:'membership_hours_restored', customerId:m.customerId||'', mobile:m.mobile, invoiceId:u.invoiceId||null, invoiceNumber:u.invoiceNumber||'', membershipId:m.id, hours:rnd2(u.minutes/60), originalRef:u.ledgerRef||null, description:'Integrity repair: duplicate usage reversed', reason:'Integrity repair' });
+      u.reversed = true; u.reversedNote = 'Integrity repair: duplicate'; u.reversalRef = e.id; await dbPut('memberships', m);
+      await audit({ reason:'Duplicate free-hour usage reversed', details:{ membership:m.id, usage:u.id, hours:rnd2(u.minutes/60), ledger:e.id } }); return `Restored ${fmtDur(u.minutes)}.`; }
+    case 'session_unlink': {
+      const s = await dbGet('bsessions', fix.id); if(!s) throw new Error('Session not found.'); const was = { invoiceId:s.invoiceId, status:s.status };
+      await dbUpdate('bsessions', s.id, d=>{ d.invoiceId=null; delete d.invoiceNumber; delete d.finalizedAt; if(['finalized','paid'].includes(d.status)) d.status='ready'; d.updatedAt=Date.now(); return true; });
+      updateLiveCache(await dbGet('bsessions', s.id)); await audit({ reason:'Session unlinked from a missing/deleted invoice', details:{ session:sesCode(s), was } }); return `Session ${sesCode(s)} unlinked.`; }
+    case 'drop_active_copy': {
+      const a = await dbGet('archivedInvoices', fix.id), i = await dbGet('invoices', fix.id); if(!a||!i) throw new Error('Both copies must exist.');
+      await dbDel('invoices', fix.id); await audit({ reason:'Duplicate active copy of an archived invoice removed (archive copy kept)', details:{ invoice:a.number, id:a.id } }); return `Removed the active copy of ${a.number}.`; }
+    case 'create_customer': {
+      if(await dbGet('customers', fix.mobile)) return 'Customer already exists.';
+      const now = new Date().toISOString();
+      await dbPut('customers', { mobile:fix.mobile, cid:fix.cid, name:fix.name, email:'', address:'', joined:now, visits:0, gamingSessions:0, gamingHours:0, gamingSpend:0, foodSpend:0, totalSpend:0, lastVisit:now, invoiceIds:[], notes:'Re-created by integrity repair' });
+      await audit({ reason:'Missing customer re-created', details:{ mobile:fix.mobile, cid:fix.cid } }); return `Customer ${fix.mobile} re-created.`; }
+    case 'invoice_status': {
+      const i = await dbGet(fix.store||'invoices', fix.id); if(!i) throw new Error('Invoice not found.'); const was=i.status; i.status = invoiceBalance(i)<=0?'paid':'finalized'; await dbPut(fix.store||'invoices', i);
+      await audit({ reason:'Invoice paid/unpaid flag corrected', details:{ invoice:i.number, was, now:i.status } }); return `${i.number}: status ${was} → ${i.status}.`; }
+  }
+  throw new Error('Unknown repair.');
+}
+
+/* ---------- Membership module (bottom-navigation tab) ---------- */
+function memName(m, custs){ const c = custs.find(x=>m.customerId ? x.cid===m.customerId : x.mobile===m.mobile); return c ? c.name : m.customerName; }
+function memMobile(m, custs){ const c = custs.find(x=>m.customerId ? x.cid===m.customerId : x.mobile===m.mobile); return c ? c.mobile : m.mobile; }
+async function screenMembership(){
+  const A = state.mem = Object.assign({ tab:'members', q:'', f:'all', from:ymd(Date.now()-29*864e5), to:ymd(Date.now()) }, state.mem||{});
+  const [all0, custs] = await Promise.all([dbAll('memberships'), dbAll('customers')]);
+  const all = all0.sort((a,b)=>b.startDate-a.startDate); const now = Date.now();
+  const tabs = [['members','Members'],['plans','Plans'],['sales','Sales'],['usage','Free hours'],['renewals','Renewals']].map(([k,l])=>`<span class="chip ${A.tab===k?'sel':''}" onclick="state.mem.tab='${k}';render()">${l}</span>`).join('');
+  const cnt = s=>all.filter(m=>memStatus(m)===s).length; let body = '';
+  const row = m=>`<div class="card" style="cursor:pointer" onclick="state.custProfile='${memMobile(m,custs)}';go('customerProfile')"><div class="list-item"><span>${tierBadge(m.tier,m.period)} <b>${esc(memName(m,custs))}</b><br><span class="muted" style="font-size:12px">${fmtMobile(memMobile(m,custs))} · ${fdate(m.startDate)} → ${fdate(m.expiryDate)} · ${memHours(memStatus(m)==='Active'?memRemainMin(m):0)} of ${rnd2(m.freeHours)}h left</span></span><span style="text-align:right"><span class="pill ${memStatus(m)==='Active'?'green':'amber'}">${memStatus(m)}</span><br><span class="muted" style="font-size:11px">${esc(m.receiptNo)}</span></span></div></div>`;
+  if(A.tab==='plans'){
+    const rows = memPlans().map(p=>`<div class="card" style="cursor:pointer" onclick="${isAdmin()?`membershipPlanModal('${p.id}')`:`tell('Only an administrator can edit plans.')`}"><div class="list-item"><span>${tierBadge(p.tier,p.period)} <b>${esc(p.name)}</b> ${p.active===false?'<span class="pill amber">off</span>':''}<br><span class="muted" style="font-size:12px">${p.freeHours?rnd2(p.freeHours)+'h free · ':''}${p.gamingDiscount}% gaming${p.foodDiscount?` · ${p.foodDiscount}% snacks`:''} · ${p.durationMonths} month${p.durationMonths>1?'s':''}</span></span><b>${fmt(p.price)}</b></div><div class="muted" style="font-size:12px">${esc(p.benefits||'')}</div></div>`).join('');
+    body = `${isAdmin()?`<button class="btn primary" style="margin-bottom:8px" onclick="membershipPlanModal('')">+ New plan</button>`:''}${rows}<div class="card"><b>Rules</b><div class="muted" style="font-size:12px;margin-top:4px">${MEM_RULES.map(r=>'• '+r).join('<br>')}</div></div>`;
+  } else if(A.tab==='sales'){
+    const t0 = new Date(A.from+'T00:00:00').getTime(), t1 = new Date(A.to+'T23:59:59.999').getTime();
+    const sold = all.filter(m=>m.payment && m.createdAt>=t0 && m.createdAt<=t1); const paid = sold.filter(m=>m.payment.amount>0);
+    const byPlan = {}; sold.forEach(m=>{ const k=m.period+' '+m.planName; (byPlan[k]=byPlan[k]||{n:0,rev:0}).n++; byPlan[k].rev+=m.payment.amount; });
+    body = `<div class="card"><div class="grid2"><div><label>From</label><input type="date" value="${A.from}" onchange="state.mem.from=this.value;render()"></div><div><label>To</label><input type="date" value="${A.to}" onchange="state.mem.to=this.value;render()"></div></div>
+      <div class="grid2" style="margin-top:8px"><div class="stat"><div class="v" id="memRev">${fmt(sold.reduce((z,m)=>z+m.payment.amount,0))}</div><div class="l">Membership revenue</div></div><div class="stat"><div class="v">${sold.length}</div><div class="l">Sold (${sold.length-paid.length} complimentary)</div></div></div></div>
+      ${Object.entries(byPlan).map(([k,v])=>`<div class="list-item"><span>${esc(k)} × ${v.n}</span><b>${fmt(v.rev)}</b></div>`).join('')}
+      <div class="section-title">Sales</div>${sold.map(m=>`<div class="list-item" style="cursor:pointer" onclick="membershipReceipt(${m.id})"><span>${esc(memName(m,custs))}<br><span class="muted" style="font-size:12px">${fdt(m.createdAt)} · ${esc(m.receiptNo)} · ${esc(m.payment.method)}</span></span><b>${m.complimentary?'Free':fmt(m.payment.amount)}</b></div>`).join('')||'<div class="muted">No sales in this range.</div>'}`;
+  } else if(A.tab==='usage'){
+    const act = all.filter(m=>memStatus(m)==='Active');
+    const use = all.flatMap(m=>(m.usage||[]).map(u=>({ m, u }))).sort((a,b)=>b.u.ts-a.u.ts).slice(0,100);
+    body = `<div class="card"><div class="grid2"><div class="stat"><div class="v">${rnd2(act.reduce((z,m)=>z+memRemainMin(m),0)/60)}h</div><div class="l">Free hours left (active)</div></div><div class="stat"><div class="v">${rnd2(all.reduce((z,m)=>z+memUsedMin(m),0)/60)}h</div><div class="l">Used (all time)</div></div></div></div>
+      <div class="section-title">Balances</div>${act.map(m=>`<div class="list-item"><span>${esc(memName(m,custs))}<br><span class="muted" style="font-size:12px">${esc(m.period)} ${esc(m.planName)}</span></span><b>${memHours(memRemainMin(m))} / ${rnd2(m.freeHours)}h</b></div>`).join('')||'<div class="muted">No active members.</div>'}
+      <div class="section-title">Usage history</div>${use.map(({m,u})=>`<div class="list-item"><span${u.reversed?' style="text-decoration:line-through;opacity:.6"':''}>${esc(memName(m,custs))} · ${esc(u.invoiceNumber||'')}<br><span class="muted" style="font-size:12px">${fdt(u.ts)}${u.reversed?' · reversed (invoice deleted)':''}</span></span><b>−${fmtDur(u.minutes)}</b></div>`).join('')||'<div class="muted">No usage yet.</div>'}`;
+  } else if(A.tab==='renewals'){
+    const latest = {}; all.forEach(m=>{ const k=m.customerId||m.mobile; const cur=latest[k]; if(!cur || m.expiryDate>cur.expiryDate) latest[k]=m; });
+    const soon = all.filter(m=>memStatus(m)==='Active' && m.expiryDate-now<=14*864e5 && latest[m.customerId||m.mobile]===m);
+    const lapsed = Object.values(latest).filter(m=>['Expired','Cancelled'].includes(memStatus(m)) && now-m.expiryDate<=180*864e5);
+    const rr = (m,label)=>`<div class="card"><div class="list-item"><span>${tierBadge(m.tier,m.period)} <b>${esc(memName(m,custs))}</b><br><span class="muted" style="font-size:12px">${label} ${fdate(m.expiryDate)} · ${memHours(memStatus(m)==='Active'?memRemainMin(m):0)} free left</span></span>${isAdmin()?`<button class="btn sm primary" onclick="membershipCreateModal({cid:'${m.customerId||''}',mobile:'${memMobile(m,custs)}',planId:'${m.planId}',renew:${memStatus(m)==='Active'}})">Renew</button>`:''}</div></div>`;
+    body = `<div class="section-title">Expiring within 14 days</div>${soon.map(m=>rr(m,'Expires')).join('')||'<div class="muted">None.</div>'}<div class="section-title">Expired / cancelled (last 6 months)</div>${lapsed.map(m=>rr(m,'Ended')).join('')||'<div class="muted">None.</div>'}<div class="muted" style="font-size:12px;margin-top:8px">Renewing an active membership queues the next period to start the day after the current one ends. Unused free hours do not carry forward.</div>`;
+  } else {
+    const q = (A.q||'').toLowerCase(); const list = all.filter(m=>(A.f==='all'||memStatus(m)===A.f) && (!q||(memName(m,custs)+' '+memMobile(m,custs)+' '+m.planName+' '+m.receiptNo).toLowerCase().includes(q)));
+    body = `<div class="card"><div class="grid2"><div class="stat"><div class="v">${cnt('Active')}</div><div class="l">Active</div></div><div class="stat"><div class="v">${cnt('Expired')}</div><div class="l">Expired</div></div><div class="stat"><div class="v">${cnt('Cancelled')}</div><div class="l">Cancelled</div></div><div class="stat"><div class="v">${cnt('Scheduled')}</div><div class="l">Renewal queued</div></div></div></div>
+      <div style="margin-bottom:8px">${[['all','All'],['Active','Active'],['Expired','Expired'],['Cancelled','Cancelled'],['Scheduled','Queued']].map(([k,l])=>`<span class="chip ${A.f===k?'sel':''}" onclick="state.mem.f='${k}';render()">${l}</span>`).join('')}</div>
+      <input id="memQ" placeholder="Search name, mobile, plan or receipt" value="${esc(A.q)}" oninput="state.mem.q=this.value;memListFilter()" style="margin-bottom:8px"><div id="memList">${list.map(row).join('')||'<div class="empty">No memberships found.</div>'}</div>`;
+    window.__memRows = { list, row };
+  }
+  return `<h2>Membership</h2>${isAdmin()?`<button class="btn primary" style="margin-bottom:8px" id="memCreate" onclick="membershipCreateModal({})">＋ Create membership</button>`:''}<div style="margin-bottom:8px">${tabs}</div>${body}`;
+}
+function memListFilter(){ clearTimeout(window.__mlT); window.__mlT = setTimeout(()=>{ const a=document.activeElement; render().then(()=>{ const i=document.getElementById('memQ'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } }); },150); }
+function membershipSellModal(mobile){ membershipCreateModal({ mobile }); }   // older entry point (customer profile)
+let __ms = { mode:'existing', cust:null, renew:false };
+async function membershipCreateModal(pre){
+  if(!needAdmin()) return; pre = pre||{};
+  const plans = memPlans().filter(p=>p.active!==false); const st = (await dbGet('settings','main'))||state.settings||{};
+  __ms = { mode:'existing', cust:null, renew:!!pre.renew };
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Create membership</h3>
+    <div style="margin-bottom:8px"><span class="chip sel" id="msTabE" onclick="msMode('existing')">Existing customer</span><span class="chip" id="msTabN" onclick="msMode('new')">New customer</span></div>
+    <div id="msExisting"><label>Search by name or mobile</label><input id="msName" placeholder="Start typing name or mobile" autocomplete="off"><div id="msPicked" style="font-size:12px;margin-top:6px"></div></div>
+    <div id="msNew" hidden><label>Customer name *</label><input id="msNName" placeholder="Full name" autocomplete="off"><label>Mobile number *</label><input id="msNMobile" inputmode="numeric" placeholder="10-digit mobile" autocomplete="off">
+      <div id="msDup" style="font-size:12px;margin-top:6px"></div><div class="grid2"><div><label>Email (optional)</label><input id="msNEmail" type="email"></div><div><label>Birthday (optional)</label><input id="msNBday" type="date"></div></div><label>Notes (optional)</label><input id="msNNotes"></div>
+    <label>Plan</label><select id="msPlan" onchange="membershipSellInfo()">${plans.map(p=>`<option value="${p.id}" ${p.id===pre.planId?'selected':''}>${esc(p.period)} ${esc(p.name)} — ${fmt(p.price)}</option>`).join('')}</select>
+    <div class="card" style="margin:6px 0;padding:8px" id="msInfo"></div>
+    <label>Payment</label><select id="msPay" onchange="membershipPayChange()">${PAY_METHODS.map(m=>`<option>${m}</option>`).join('')}<option value="__comp">Complimentary (authorized activation)</option></select>
+    <div id="msComp" hidden><label>Reason for complimentary activation (required)</label><input id="msReason" placeholder="e.g. tournament winner"></div>
+    <div id="msPinBox" hidden>${admPinField(!!st.adminPinHash)}</div>
+    <button class="btn primary" style="margin-top:10px" id="msGo" onclick="membershipCreateConfirm()">Record payment &amp; activate</button>`);
+  const pick = c=>{ __ms.cust = c; document.getElementById('msName').value = c.name; document.getElementById('msPicked').innerHTML = `<span class="pill green">${esc(c.name)} · ${esc(fmtMobile(c.mobile))} ✓</span>`; membershipSellInfo(); };
+  window.__msPick = pick;
+  attachCustomerSuggest(document.getElementById('msName'),'name',pick);
+  document.getElementById('msNMobile').addEventListener('input', msDupCheck);
+  if(pre.mobile||pre.cid){ const c = pre.cid ? await customerByCid(pre.cid) : await dbGet('customers', pre.mobile); if(c) pick(c); }
+  membershipSellInfo();
+}
+function msMode(m){ __ms.mode=m; document.getElementById('msExisting').hidden = m!=='existing'; document.getElementById('msNew').hidden = m!=='new'; document.getElementById('msTabE').classList.toggle('sel',m==='existing'); document.getElementById('msTabN').classList.toggle('sel',m==='new'); membershipSellInfo(); }
+function membershipPayChange(){ const comp = document.getElementById('msPay').value==='__comp'; document.getElementById('msComp').hidden=!comp; document.getElementById('msPinBox').hidden=!comp; document.getElementById('msGo').textContent = comp?'Authorize & activate (no payment)':'Record payment & activate'; membershipSellInfo(); }
+async function msDupCheck(){
+  const mob = normMobile(document.getElementById('msNMobile').value.trim()), box = document.getElementById('msDup'); if(!mob){ box.innerHTML=''; return; }
+  const c = await dbGet('customers', mob);
+  box.innerHTML = c ? `<span class="pill amber">Already a customer: ${esc(c.name)}</span> <button type="button" class="btn sm" onclick="msUseExisting('${mob}')">Use this customer</button>` : '<span class="pill green">New number ✓</span>';
+}
+async function msUseExisting(mob){ const c = await dbGet('customers', mob); if(!c) return; msMode('existing'); window.__msPick(c); }
+async function membershipSellInfo(){
+  const p = memPlans().find(x=>x.id===document.getElementById('msPlan').value), i = document.getElementById('msInfo'); if(!p||!i) return;
+  const comp = document.getElementById('msPay') && document.getElementById('msPay').value==='__comp'; let start = Date.now(), note = '';
+  if(__ms.mode==='existing' && __ms.cust){ const cur = await activeMembership(__ms.cust.mobile); if(cur){ if(__ms.renew){ start = cur.expiryDate+1; note = `<div class="pill amber">Renewal — starts after the current plan ends (${fdate(cur.expiryDate)})</div>`; } else note = `<div class="pill amber">Already has an active ${esc(cur.planName)} membership till ${fdate(cur.expiryDate)}</div>`; } }
+  const end = endOfDay(addMonths(start,p.durationMonths)-864e5);
+  i.innerHTML = `<b>${esc(p.period)} ${esc(p.name)}</b> — ${comp?`<s>${fmt(p.price)}</s> <b>₹0 (complimentary)</b>`:`<b>${fmt(p.price)}</b>`}<div class="muted" style="font-size:12px;margin-top:4px">${p.freeHours?rnd2(p.freeHours)+' free hours · ':''}${p.gamingDiscount}% gaming${p.foodDiscount?` · ${p.foodDiscount}% snacks & drinks`:''} · ${p.birthdayHours?p.birthdayHours+' birthday hour(s) · ':''}valid ${fdate(start)} → ${fdate(end)}<br>${esc(p.benefits||'')}</div>${note}`;
+}
+async function membershipCreateConfirm(){
+  const btn = document.getElementById('msGo'); if(btn.disabled) return; btn.disabled = true;
+  try{
+    const g = id=>document.getElementById(id); const pay = g('msPay').value, comp = pay==='__comp';
+    const o = { planId:g('msPlan').value, method:comp?'Complimentary':pay, complimentary:comp, reason:comp?g('msReason').value:'', pin:g('adPin')?g('adPin').value:'', renew:__ms.renew };
+    if(__ms.mode==='new'){ o.newCustomer = { name:g('msNName').value, mobile:g('msNMobile').value, email:g('msNEmail').value, birthday:g('msNBday').value, notes:g('msNNotes').value }; }
+    else { if(!__ms.cust){ tell('Search and choose a customer first, or switch to “New customer”.'); return; } o.cid = __ms.cust.cid; o.mobile = __ms.cust.mobile; }
+    const rec = await membershipPurchase(o);
+    closeModal(); showToast('Membership activated'); membershipReceipt(rec.id); render();
+  }catch(e){
+    if(e && e.code==='DUPLICATE'){ document.getElementById('msDup').innerHTML = `<span class="pill amber">Already a customer: ${esc(e.customer.name)}</span> <button type="button" class="btn sm" onclick="msUseExisting('${e.customer.mobile}')">Use this customer</button>`; }
+    tell(e.message||String(e));
+  } finally{ btn.disabled = false; }
+}
+async function membershipReceipt(id){
+  const m = await dbGet('memberships',id); if(!m) return; const st = state.settings; const c = m.customerId ? await customerByCid(m.customerId) : null; const name = c?c.name:m.customerName, mob = c?c.mobile:m.mobile;
+  const text = `*${st.businessName||'LVL Gaming Café'}* — Membership receipt ${m.receiptNo}\n${name} (${mob})\n${m.period} ${m.planName}: ${m.complimentary?'Complimentary':fmt(m.payment.amount)+' paid by '+m.payment.method}\nValid ${fdate(m.startDate)} to ${fdate(m.expiryDate)}\nFree hours: ${rnd2(m.freeHours)}h · Gaming ${m.gamingDiscount}% off`;
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Membership receipt</h3>
+    <div class="card" style="text-align:left"><b>${esc(st.businessName||'')}</b><div class="muted" style="font-size:12px">Receipt ${esc(m.receiptNo)} · ${fdt(m.payment.date)}</div>
+    <table style="margin-top:8px"><tr><td>Customer</td><td class="right">${esc(name)}<br>${fmtMobile(mob)}<br><span class="muted" style="font-size:11px">ID ${esc(m.customerId||'')}</span></td></tr><tr><td>Plan</td><td class="right">${tierBadge(m.tier,m.period)} ${esc(m.planName)}</td></tr>
+    <tr><td>Starts</td><td class="right">${fdate(m.startDate)}</td></tr><tr><td>Expires</td><td class="right">${fdate(m.expiryDate)}</td></tr>
+    <tr><td>Free hours</td><td class="right">${rnd2(m.freeHours)}h</td></tr><tr><td>Gaming / snacks discount</td><td class="right">${m.gamingDiscount}% / ${m.foodDiscount}%</td></tr>
+    <tr><td>Paid by</td><td class="right">${esc(m.payment.method)}${m.complimentary?' — '+esc(m.complimentaryReason||''):''}</td></tr><tr class="total-row"><td>Amount paid</td><td class="right">${fmt(m.payment.amount)}</td></tr></table>
+    <div class="muted" style="font-size:12px;margin-top:6px">${esc(m.benefits||'')}</div><div class="muted" style="font-size:11px;margin-top:6px">${MEM_RULES.join(' ')}</div></div>
+    <a class="btn" style="display:block;text-align:center;margin-top:8px" target="_blank" rel="noopener" href="https://wa.me/91${mob}?text=${encodeURIComponent(text)}">Send on WhatsApp</a>`);
+}
+
+/* ---------- Customer edit (name / mobile can change; memberships stay linked through the customer ID) ---------- */
+async function customerEditModal(mobile){
+  if(!needAdmin()) return; const c = await dbGet('customers', mobile); if(!c) return; await ensureCid(c);
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Edit customer</h3><div class="muted" style="font-size:11px">Customer ID ${esc(c.cid)} — permanent</div>
+    <label>Name</label><input id="ceName" value="${esc(c.name)}"><label>Mobile</label><input id="ceMobile" inputmode="numeric" value="${esc(c.mobile)}"><label>Email</label><input id="ceEmail" value="${esc(c.email||'')}"><label>Notes</label><input id="ceNotes" value="${esc(c.notes||'')}">
+    <div class="muted" style="font-size:12px;margin-top:6px">Memberships, loyalty points and invoices stay with this customer even if the name or mobile changes.</div>
+    <button class="btn primary" style="margin-top:10px" onclick="customerEditSave('${c.cid}')">Save</button>`);
+}
+async function customerEditSave(cid){
+  const g = id=>document.getElementById(id).value;
+  try{ const u = await customerUpdate(cid, { name:g('ceName'), mobile:g('ceMobile'), email:g('ceEmail'), notes:g('ceNotes') }); closeModal(); state.custProfile = u.mobile; showToast('Customer updated'); render(); }
+  catch(e){ tell(e.message||String(e)); }
+}
+
+/* ---------- Invoice ARCHIVE ---------- */
+const ARCH_PAGE = 25;
+async function archFetch(F, cursor){
+  const f = fb(), col = f.collection(f.db,'archivedInvoices'); const q = (F.q||'').trim();
+  const t0 = F.from ? new Date(F.from+'T00:00:00').getTime() : null, t1 = F.to ? new Date(F.to+'T23:59:59.999').getTime() : null;
+  const inR = r=>(!t0||r.date>=t0)&&(!t1||r.date<=t1);
+  if(/^TX-/i.test(q)){ const e = await dbGet('ledger', q.toUpperCase()); if(!e||!e.invoiceId) return { rows:[], done:true }; const r = await dbGet('archivedInvoices', e.invoiceId); return { rows:r&&inR(r)?[r]:[], done:true }; }
+  if(q){
+    const prefix = state.settings.invoicePrefix||'LVL-INV-'; const up = q.toUpperCase(); const forms = new Set([up]); if(/^\d{1,6}$/.test(q)) forms.add(prefix.toUpperCase()+q.padStart(6,'0'));
+    const rows = new Map();
+    for(const s of forms){ const snap = await f.getDocs(f.query(col, f.where('number','>=',s), f.where('number','<=',s+''), f.limit(50))); snap.docs.forEach(d=>rows.set(d.data().id, d.data())); }
+    const lq = q.toLowerCase(), dg = q.replace(/\D/g,'');
+    const custs = (await dbAll('customers')).filter(c=>c.name.toLowerCase().includes(lq) || (dg.length>=3 && c.mobile.includes(dg))).slice(0,8);
+    for(const c of custs){ const cid = await ensureCid(c); const snap = await f.getDocs(f.query(col, f.where('customerId','==',cid))); snap.docs.forEach(d=>rows.set(d.data().id, d.data())); }
+    return { rows:[...rows.values()].filter(inR).sort((a,b)=>b.date-a.date), done:true };
+  }
+  const qs = []; if(t0) qs.push(f.where('date','>=',t0)); if(t1) qs.push(f.where('date','<=',t1)); qs.push(f.orderBy('date','desc')); if(cursor!=null) qs.push(f.startAfter(cursor)); qs.push(f.limit(ARCH_PAGE));
+  const snap = await f.getDocs(f.query(col, ...qs)); const rows = snap.docs.map(d=>d.data());
+  return { rows, cursor:rows.length?rows[rows.length-1].date:cursor, done:rows.length<ARCH_PAGE };
+}
+function archRowsHtml(rows){ return rows.map(i=>`<div class="card" style="cursor:pointer" onclick="archivedInvoiceModal(${i.id})"><div class="list-item"><div><b>${esc(i.number)}</b> <span class="pill">Archived</span><br><span class="muted" style="font-size:12px">${esc(i.customerName||'')} · ${new Date(i.date).toLocaleDateString('en-IN')}</span></div><div style="text-align:right"><b>${fmt(i.grandTotal)}</b></div></div></div>`).join(''); }
+async function archReset(){ const A = state.arch; A.rows=[]; A.cursor=null; A.done=false; const l=document.getElementById('archList'); if(l) l.innerHTML='<div class="muted">Searching…</div>'; await archMore(true); }
+async function archMore(first){
+  const A = state.arch; if(A.busy||A.done) return; A.busy = true;
+  try{ const r = await archFetch(A, A.cursor); A.rows = A.rows.concat(r.rows); A.cursor = r.cursor; A.done = r.done; }
+  catch(e){ console.error(e); const l=document.getElementById('archList'); if(l) l.innerHTML=`<div class="empty">Could not read the archive: ${esc(e.message||e)}</div>`; A.busy=false; return; }
+  A.busy = false; const l = document.getElementById('archList'); if(!l) return;
+  l.innerHTML = (A.rows.length ? archRowsHtml(A.rows) : '<div class="empty">No archived invoices match.</div>') + (A.done ? (A.rows.length?`<div class="muted" style="text-align:center;font-size:12px">${A.rows.length} shown · end of results</div>`:'') : `<button class="btn" id="archMoreBtn" onclick="archMore()">Load more</button>`);
+}
+function screenInvoiceArchiveHtml(){
+  const A = state.arch = state.arch || { q:'', from:'', to:'', rows:[], cursor:null, done:false, busy:false };
+  setTimeout(archReset,0);
+  return `<div class="card" style="padding:10px"><input id="archQ" placeholder="Invoice no., customer name / mobile, or transaction ID (TX-…)" value="${esc(A.q)}" onkeydown="if(event.key==='Enter'){state.arch.q=this.value;archReset()}">
+    <div class="grid2"><div><label>From</label><input id="archFrom" type="date" value="${esc(A.from)}"></div><div><label>To</label><input id="archTo" type="date" value="${esc(A.to)}"></div></div>
+    <div class="grid2" style="margin-top:6px"><button class="btn primary" id="archGo" onclick="state.arch.q=document.getElementById('archQ').value;state.arch.from=document.getElementById('archFrom').value;state.arch.to=document.getElementById('archTo').value;archReset()">Search archive</button>${isAdmin()?`<button class="btn" id="archBulk" onclick="archiveOldModal()">Archive old invoices…</button>`:'<span></span>'}</div></div>
+    <div class="muted" style="font-size:12px;margin-bottom:8px">Archived invoices keep their numbers, payments and loyalty / membership references and still count in reports. They are read ${ARCH_PAGE} at a time.</div><div id="archList"></div>`;
+}
+async function archivedInvoiceModal(id){
+  const i = await dbGet('archivedInvoices', id); if(!i) return; const led = await ledgerQuery('invoiceId', id).catch(()=>[]);
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>${esc(i.number)} <span class="pill">Archived</span></h3>
+    <div class="muted" style="font-size:12px">${esc(i.customerName||'')} ${i.customerMobile?'· '+esc(i.customerMobile):''} · ${new Date(i.date).toLocaleString('en-IN')}<br>Customer ID ${esc(i.customerId||'—')} · archived ${fdt(i.archivedAt)} by ${esc(i.archivedBy||'')}</div>
+    <table style="margin-top:8px"><tr><td>Subtotal</td><td class="right">${fmt(i.subtotal)}</td></tr>${invBenefitRows(i).map(([a,b])=>`<tr><td>${esc(a)}</td><td class="right">${esc(b)}</td></tr>`).join('')}<tr class="total-row"><td>Grand total</td><td class="right">${fmt(i.grandTotal)}</td></tr>
+    ${(i.payments||[]).map(p=>`<tr><td>${p.amount<0?'Refund':'Paid'} — ${esc(p.method)}</td><td class="right">${fmt(Math.abs(p.amount))}</td></tr>`).join('')}<tr><td>Balance</td><td class="right">${fmt(Math.max(0,invoiceBalance(i)))}</td></tr></table>
+    <div class="section-title">Ledger references</div>${led.map(l=>`<div class="list-item"><span>${esc(LEDGER_LABEL[l.type]||l.type)}<br><span class="muted" style="font-size:11px">${esc(l.id)} · ${fdt(l.ts)}</span></span><b>${l.amount?fmt(l.amount):l.points?fpts(l.points)+' pts':l.hours?rnd2(l.hours)+'h':''}</b></div>`).join('')||'<div class="muted" style="font-size:12px">No ledger rows.</div>'}
+    ${isAdmin()?`<div class="grid2" style="margin-top:10px"><button class="btn" onclick="unarchiveModal(${i.id})">Return to active</button><button class="btn danger" onclick="closeModal();adminDeleteModal([${i.id}])">Delete…</button></div>`:''}`);
+}
+function unarchiveModal(id){ openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Return to active list?</h3>${admPinField(!!(state.settings||{}).adminPinHash)}<button class="btn primary" style="margin-top:10px" onclick="unarchiveDo(${id})">Return invoice</button>`); }
+async function unarchiveDo(id){ try{ const p=document.getElementById('adPin'); await unarchiveInvoiceCore(id,{pin:p?p.value:''}); closeModal(); showToast('Returned to the active list'); render(); }catch(e){ tell(e.message||String(e)); } }
+function archiveOldModal(){
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Archive old invoices</h3><p class="muted" style="font-size:13px">Moves fully paid invoices older than the chosen age out of the everyday list. Nothing is deleted: totals, payments, loyalty and membership records stay, and reports still include them.</p>
+    <label>Older than (days)</label><input id="aoDays" type="number" min="30" value="180" oninput="archiveOldPreview()"><div id="aoInfo" class="muted" style="font-size:13px;margin:6px 0"></div>${admPinField(!!(state.settings||{}).adminPinHash)}
+    <button class="btn primary" id="aoGo" style="margin-top:10px" onclick="archiveOldDo()">Archive</button>`); archiveOldPreview();
+}
+async function archiveOldList(){ const days = Math.max(30, Number(document.getElementById('aoDays').value)||180), cut = Date.now()-days*864e5; return (await dbAllFresh('invoices')).filter(i=>i.date<cut && invoiceBalance(i)<=0); }
+async function archiveOldPreview(){ const l = await archiveOldList(); const el = document.getElementById('aoInfo'); if(el) el.textContent = `${l.length} paid invoice${l.length===1?'':'s'} will be archived.`; }
+async function archiveOldDo(){
+  const btn = document.getElementById('aoGo'); btn.disabled = true;
+  try{ const l = await archiveOldList(); const p = document.getElementById('adPin'); const r = await archiveInvoicesCore(l.map(i=>i.id), { pin:p?p.value:'', reason:'Bulk archive' }); closeModal(); showToast(`${r.done.length} archived${r.skipped.length?', '+r.skipped.length+' skipped':''}`); render(); }
+  catch(e){ tell(e.message||String(e)); btn.disabled = false; }
+}
+function archiveOneModal(id){ openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Archive this invoice?</h3><p class="muted" style="font-size:13px">It leaves the everyday list but stays searchable under Invoice → Archive and in reports.</p>${admPinField(!!(state.settings||{}).adminPinHash)}<button class="btn primary" style="margin-top:10px" onclick="archiveOneDo(${id})">Archive</button>`); }
+async function archiveOneDo(id){ try{ const p=document.getElementById('adPin'); const r=await archiveInvoicesCore([id],{pin:p?p.value:'',reason:'Archived by admin'}); closeModal(); if(r.skipped.length){ tell('Not archived: '+r.skipped[0].why); return; } showToast('Archived'); await goBack('invoices'); }catch(e){ tell(e.message||String(e)); } }
+
+/* ---------- Admin Tools hub, Data Integrity Check, Ledger ---------- */
+function screenAdminTools(){
+  if(!isAdmin()) return `<button class="btn ghost sm" onclick="goBack('more')">← More</button><h2>Admin Tools</h2><div class="card" style="border-color:var(--amber)"><b>Admin only</b></div>`;
+  const row = (go,label,sub)=>`<div class="list-item" role="button" tabindex="0" onclick="${go}"><span>${label}<br><span class="muted" style="font-size:11px">${sub}</span></span><span>›</span></div>`;
+  return `<button class="btn ghost sm" style="margin-bottom:8px" onclick="goBack('more')">← More</button><h2>Admin Tools</h2><div class="card">
+    ${row("openAdminInvoices()",'Invoice management','Delete, restore and review deleted invoices')}
+    ${row("go('integrity')",'Data Integrity Check','Find and repair inconsistent records')}
+    ${row("go('ledgerView')",'Transaction ledger','Append-only history of every money, points and hours movement')}
+    ${row("state.invTab='archive';go('invoices')",'Invoice archive','Search and manage archived invoices')}
+    ${row("go('backup')",'Backup &amp; recovery','Full / section backups, validated restore')}</div>`;
+}
+async function screenIntegrity(){
+  if(!isAdmin()) return `<button class="btn ghost sm" onclick="goBack('adminTools')">← Admin Tools</button><h2>Data Integrity Check</h2><div class="card" style="border-color:var(--amber)"><b>Admin only</b></div>`;
+  const log = (await dbAllFresh('auditLog')).filter(l=>l.action==='integrity_repair'||l.action==='schema_migration').sort((a,b)=>b.ts-a.ts).slice(0,50);
+  const R = __integ; let h = `<button class="btn ghost sm" style="margin-bottom:8px" onclick="goBack('adminTools')">← Admin Tools</button><h2>Data Integrity Check</h2>
+    <div class="card"><div class="muted" style="font-size:13px;margin-bottom:8px">Scans invoices, the archive, sessions, customers, memberships, loyalty and the ledger. Nothing is changed until you approve a repair, and suspicious financial records are never deleted.</div><button class="btn primary" id="icRun" onclick="integrityRun()">Run check</button></div><div id="icOut">`;
+  if(R){ h += integrityHtml(R); }
+  h += `</div><div class="section-title">Repair audit log</div>${log.map(l=>`<div class="list-item"><span style="min-width:0">${esc(l.action==='schema_migration'?'Migration '+l.number:(l.reason||l.number))}<br><span class="muted" style="font-size:11px">${fdt(l.ts)} · ${esc(l.by||'')}${l.details?' · '+esc(JSON.stringify(l.details)).slice(0,160):''}</span></span></div>`).join('')||'<div class="muted" style="font-size:12px">No repairs yet.</div>'}`;
+  return h;
+}
+function integrityHtml(R){
+  const c = R.counts; const total = R.issues.reduce((z,g)=>z+g.items.length,0); const fixable = R.issues.flatMap(g=>g.items).filter(i=>i.fix).length;
+  let h = `<div class="card"><b id="icSummary">${total?`${total} problem${total>1?'s':''} found`:'✓ No problems found'}</b><div class="muted" style="font-size:12px">Checked ${c.invoices} active + ${c.archived} archived + ${c.deleted} deleted invoices · ${c.sessions} sessions · ${c.customers} customers · ${c.memberships} memberships · ${c.loyalty} loyalty rows · ${c.ledger} ledger entries · ${fdt(R.at)}</div>${fixable?`<button class="btn sm" style="margin-top:8px" onclick="integrityRepairModal(-1)">Repair all safe items (${fixable})</button>`:''}</div>`;
+  R.issues.forEach(g=>{ h += `<div class="card" style="border-color:${g.sev==='error'?'var(--red)':'var(--amber)'}" data-code="${g.code}"><b>${esc(g.title)}</b> <span class="pill ${g.sev==='error'?'red':'amber'}">${g.items.length}</span><div class="muted" style="font-size:12px;margin:4px 0">${esc(g.recommend)}</div>${g.items.map(it=>`<div class="list-item"><span style="min-width:0;font-size:12px">${esc(it.text)}${it.note?`<br><i>${esc(it.note)}</i>`:''}</span>${it.fix?`<button class="btn sm" onclick="integrityRepairModal(${it.idx})">Repair</button>`:''}</div>`).join('')}</div>`; });
+  return h;
+}
+async function integrityRun(){ const b = document.getElementById('icRun'); if(b){ b.disabled = true; b.textContent = 'Checking…'; } try{ __integ = await integrityScan(); } catch(e){ tell('Check failed: '+(e.message||e)); } render(); }
+function integrityRepairModal(idx){
+  const all = __integ.issues.flatMap(g=>g.items); const sel = idx<0 ? all.filter(i=>i.fix) : all.filter(i=>i.idx===idx); window.__icSel = sel;
+  openModal(`<button class="close" onclick="closeModal()">✕</button><h3>Approve repair${sel.length>1?'s':''}?</h3><p class="muted" style="font-size:13px">Each repair only adds a correcting entry or fixes a link / flag, and is recorded in the repair audit log.</p>${sel.slice(0,8).map(i=>`<div style="font-size:12px;margin:4px 0">• ${esc(i.text)}</div>`).join('')}${sel.length>8?`<div class="muted">+ ${sel.length-8} more</div>`:''}${admPinField(!!(state.settings||{}).adminPinHash)}<button class="btn primary" id="icGo" style="margin-top:10px" onclick="integrityRepairDo()">Repair</button>`);
+}
+async function integrityRepairDo(){
+  const sel = window.__icSel||[]; const p = document.getElementById('adPin'); const pin = p?p.value:''; const btn = document.getElementById('icGo'); if(btn) btn.disabled = true; const msgs = [];
+  try{ await admAuthorize(pin); }catch(e){ tell(e.message); if(btn) btn.disabled=false; return; }
+  for(const it of sel){ try{ msgs.push(await integrityRepairCore(it.fix,{ pin })); }catch(e){ msgs.push('Failed: '+(e.message||e)); } }
+  closeModal(); try{ __integ = await integrityScan(); }catch(e){} render(); tell(msgs.join('\n'));
+}
+let __led = { rows:[], cursor:null, done:false, q:'', type:'all', busy:false };
+async function ledgerFetch(){
+  const f = fb(), col = f.collection(f.db,'ledger'); const q = (__led.q||'').trim();
+  if(q){
+    if(/^TX-/i.test(q) || /^MIG-/i.test(q)){ const e = await dbGet('ledger', q.toUpperCase()); return { rows:e?[e]:[], done:true }; }
+    const rows = new Map(); const prefix = (state.settings.invoicePrefix||'LVL-INV-').toUpperCase(); const forms = new Set([q.toUpperCase()]); if(/^\d{1,6}$/.test(q)) forms.add(prefix+q.padStart(6,'0'));
+    for(const s of forms){ const snap = await f.getDocs(f.query(col, f.where('invoiceNumber','>=',s), f.where('invoiceNumber','<=',s+''), f.limit(100))); snap.docs.forEach(d=>rows.set(d.data().id,d.data())); }
+    const lq = q.toLowerCase(), dg = q.replace(/\D/g,''); const custs = (await dbAll('customers')).filter(c=>c.name.toLowerCase().includes(lq)||(dg.length>=3&&c.mobile.includes(dg))).slice(0,5);
+    for(const c of custs){ const cid = await ensureCid(c); const snap = await f.getDocs(f.query(col, f.where('customerId','==',cid))); snap.docs.forEach(d=>rows.set(d.data().id,d.data())); }
+    return { rows:[...rows.values()].sort((a,b)=>b.ts-a.ts), done:true };
+  }
+  const qs = [f.orderBy('ts','desc')]; if(__led.cursor!=null) qs.push(f.startAfter(__led.cursor)); qs.push(f.limit(30));
+  const snap = await f.getDocs(f.query(col, ...qs)); const rows = snap.docs.map(d=>d.data()); return { rows, cursor:rows.length?rows[rows.length-1].ts:__led.cursor, done:rows.length<30 };
+}
+function ledgerPaint(){
+  const l = document.getElementById('ledList'); if(!l) return; const byOrig = {}; __led.rows.forEach(r=>{ if(r.originalRef) (byOrig[r.originalRef]=byOrig[r.originalRef]||[]).push(r.id); });
+  const rows = __led.rows.filter(r=>__led.type==='all'||String(r.type).startsWith(__led.type));
+  l.innerHTML = (rows.map(r=>`<div class="list-item"><span style="min-width:0"><b>${esc(LEDGER_LABEL[r.type]||r.type)}</b> ${r.invoiceNumber?esc(r.invoiceNumber):''}<br><span class="muted" style="font-size:11px">${esc(r.id)} · ${fdt(r.ts)} · ${esc(r.by||'')}${r.customerId?' · '+esc(r.customerId):''}${r.originalRef?' · reverses '+esc(r.originalRef):''}${byOrig[r.id]?' · reversed by '+esc(byOrig[r.id].join(',')):''}<br>${esc(r.description||'')}${r.reason?' — '+esc(r.reason):''}</span></span><b>${r.amount?fmt(r.amount):r.points?fpts(r.points)+' pts':r.hours?rnd2(r.hours)+'h':'—'}</b></div>`).join('')||'<div class="empty">No ledger entries.</div>') + (__led.done?'':`<button class="btn" onclick="ledgerMore()">Load more</button>`);
+}
+async function ledgerMore(){ if(__led.busy||__led.done) return; __led.busy = true; try{ const r = await ledgerFetch(); __led.rows = __led.rows.concat(r.rows); __led.cursor = r.cursor; __led.done = r.done; }catch(e){ tell('Could not read the ledger: '+(e.message||e)); } __led.busy = false; ledgerPaint(); }
+function ledgerReset(){ __led.rows=[]; __led.cursor=null; __led.done=false; ledgerMore(); }
+function screenLedger(){
+  if(!isAdmin()) return `<button class="btn ghost sm" onclick="goBack('adminTools')">← Admin Tools</button><h2>Transaction ledger</h2><div class="card" style="border-color:var(--amber)"><b>Admin only</b></div>`;
+  setTimeout(ledgerReset,0);
+  return `<button class="btn ghost sm" style="margin-bottom:8px" onclick="goBack('adminTools')">← Admin Tools</button><h2>Transaction ledger</h2><div class="muted" style="font-size:12px;margin-bottom:8px">Append-only: entries are never edited or deleted — corrections are new entries that point back to the original.</div>
+    <input id="ledQ" placeholder="Search invoice no., customer, or transaction ID" value="${esc(__led.q)}" onkeydown="if(event.key==='Enter'){__led.q=this.value;ledgerReset()}" style="margin-bottom:6px">
+    <select onchange="__led.type=this.value;ledgerPaint()">${[['all','All types'],['invoice','Invoices & payments'],['loyalty','Loyalty'],['membership','Membership'],['adjustment','Adjustments']].map(([k,l])=>`<option value="${k}" ${__led.type===k?'selected':''}>${l}</option>`).join('')}</select><div id="ledList" style="margin-top:8px"></div>`;
+}
 
 /* ---------- Loyalty screen: settings, top customers, transactions ---------- */
 async function screenLoyalty(){
@@ -3257,6 +3793,7 @@ async function repLoad(start){
   if(start < Date.now()-118*86400000){   // older than the live 120-day window → read the whole history
     try{ invoices = await withTimeout(dbAllFresh('invoices'), 9000); }catch(e){ partial = true; }
   }
+  if(state.settings && state.settings.hasArchive){ try{ const ar = await withTimeout(archivedSince(start), 9000); const have = new Set(invoices.map(i=>i.id)); invoices = invoices.concat(ar.filter(a=>!have.has(a.id))); }catch(e){ partial = true; } }   // archived invoices stay in historical reports
   const products = await dbAll('products'); const pm = {}; products.forEach(p=>pm[p.id]=p);
   return { invoices, pm, partial, expenses:await dbAll('expenses'), purchases:await dbAll('purchases'), vendors:await dbAll('vendors'), employees:await dbAll('employees'), empTx:await dbAll('employeeTx'), customers:await dbAll('customers') };
 }
@@ -3565,6 +4102,7 @@ function repPrint(){ try{ window.print(); }catch(e){ tell('Printing is not avail
 function screenMore(){
   const row = (go,label,sub)=>`<div class="list-item" role="button" tabindex="0" onclick="${go}" onkeydown="if(event.key==='Enter'){${go}}"><span>${label}${sub?`<br><span class="muted" style="font-size:11px">${sub}</span>`:''}</span><span>›</span></div>`;
   return `<h2>More</h2>
+  ${state.restorePending ? `<div class="card" style="border-color:var(--red)"><b>A restore did not finish</b><p class="muted" style="font-size:12px;margin:6px 0">Open Backup &amp; Restore → Recovery to roll back to the safety snapshot.</p><button class="btn sm" onclick="go('backup')">Open</button></div>` : ''}
   ${state.showBackupReminder ? `<div class="card" style="border-color:var(--amber)"><b>Time for your backup</b>
     <p class="muted" style="font-size:12px;margin:6px 0">It's been 2+ weeks since your last backup (or you haven't made one yet).</p>
     <div class="row" style="gap:8px"><button class="btn primary sm" onclick="go('backup')">Back Up Now</button><button class="btn sm" onclick="dismissBackupReminder()">Dismiss</button></div></div>` : ''}
@@ -3574,7 +4112,6 @@ function screenMore(){
     ${row("go('set_items')",'Items Catalogue')}
     ${row("go('set_stations')",'Gaming Setups')}
     ${row("go('customers')",'Customers')}
-    ${row("go('membership')",'Membership','Plans, members, free hours, receipts')}
     ${row("go('loyalty')",'Loyalty Points','Earn / redeem rules, balances, top customers')}
     ${row("go('lmReports')",'Loyalty & Membership Summary','Sales, free hours, points, performance')}
     ${row("go('vendors')",'Vendors')}
@@ -3584,7 +4121,7 @@ function screenMore(){
     ${row("go('employees')",'Employees')}
     ${row("go('cashbank')",'Cash & Bank')}
     ${row("go('settings')",'All Settings')}
-    ${isAdmin()?row("openAdminInvoices()",'Admin Tools','Invoice management, deletion, restore & audit log'):''}
+    ${isAdmin()?row("go('adminTools')",'Admin Tools','Data integrity check, ledger, archive, invoice management'):''}
   </div>
   <button class="btn" onclick="loadDemoData()">Load Demo Data</button>
   <button class="btn" style="margin-top:10px" onclick="triggerInstall()">Install App on This Phone</button>
@@ -3857,58 +4394,36 @@ async function savePerms(){
 async function clearPin(){ if(!needAdmin()) return; await patchSettings({adminPinHash:''}); showToast('PIN removed'); render(); }
 
 /* ============ Backup & Restore ============ */
-function screenBackup(){
+async function screenBackup(){
+  const snap = await recoveryLoad('preRestore');
+  const secBtn = Object.entries(BACKUP_SECTIONS).map(([k,[l]])=>`<button class="btn sm" onclick="downloadBackup('${k}')">${l}</button>`).join('');
   return `<button class="btn ghost" style="width:auto;margin-bottom:8px" onclick="goBack('more')">← Back</button>
   <h2>Backup & Restore</h2>
+  ${state.restorePending ? `<div class="card" style="border-color:var(--red)"><b>A restore did not finish</b><p class="muted" style="font-size:12px;margin:6px 0">Use “Roll back to snapshot” below to return to the data you had before.</p></div>` : ''}
   ${state.showBackupReminder ? `<div class="card" style="border-color:var(--amber)"><b>Time for your backup</b><p class="muted" style="font-size:12px;margin:6px 0">It's been 2+ weeks since your last backup (or you haven't made one yet).</p></div>` : ''}
   <div class="card">
     <div class="section-title" style="margin-top:0">Back up</div>
     <p style="margin:0 0 10px" id="bkLast">${backupLine()}</p>
-    <div class="grid2"><button class="btn primary" onclick="downloadBackup()">Download backup file</button><button class="btn" onclick="shareBackup()">Share / save to Drive</button></div>
-    <p class="muted" style="font-size:12px;margin-top:8px">The file holds everything: customers, gaming sessions and segments, items, gaming setups, invoices and payments, expenses, purchases, vendors, employees, cash &amp; bank, and business settings. “Share” opens your phone's share menu (Google Drive, Files, WhatsApp, email).</p>
+    <div class="grid2"><button class="btn primary" onclick="downloadBackup()">Download full backup</button><button class="btn" onclick="shareBackup()">Share / save to Drive</button></div>
+    <p class="muted" style="font-size:12px;margin-top:8px">The full file holds everything: customers, sessions, invoices and the archive, memberships, the loyalty &amp; financial ledger, payments, audit history, settings and the data-format (schema) version, with checksums so damage is detected before a restore.</p>
+    <div class="muted" style="font-size:11px;margin:10px 0 4px;text-transform:uppercase">Section files (for accounting / reference)</div><div style="display:flex;flex-wrap:wrap;gap:6px">${secBtn}</div>
   </div>
   <div class="card">
     <div class="section-title" style="margin-top:0">Restore</div>
-    <label for="restoreFile">Backup file (.json)</label>
+    <label for="restoreFile">Full backup file (.json)</label>
     <input type="file" id="restoreFile" accept=".json,application/json" onchange="previewRestore()">
     <div id="restorePreview" class="muted" style="font-size:13px;margin-top:8px"></div>
     <button class="btn" id="restoreBtn" style="margin-top:8px" onclick="doRestore()" disabled>Restore Data</button>
     <button class="btn" style="margin-top:14px;border-color:var(--red);color:var(--red)" onclick="doClearAll()">Clear All Data</button>
   </div>
+  <div class="card"><div class="section-title" style="margin-top:0">Recovery</div>
+    ${snap?`<p class="muted" style="font-size:13px;margin:0 0 8px">Safety snapshot saved on this phone before the last restore: <b>${new Date(snap.createdAt).toLocaleString('en-IN')}</b>.</p><div class="grid2"><button class="btn" id="rbBtn" onclick="recoveryRollback()">Roll back to snapshot</button><button class="btn" onclick="recoveryDownload()">Download snapshot</button></div>`:'<p class="muted" style="font-size:13px;margin:0">Before every restore a safety snapshot is saved on this phone and the restore is rolled back automatically if anything fails.</p>'}</div>
   <div class="card">
     <div class="section-title">Keeping data for years</div>
     <p class="muted" style="font-size:13px">LVL Books saves everything on this phone first and syncs to your cloud database whenever there is a signal, so it keeps working offline. Even so, no storage is 100% permanent. Download a backup file every few weeks and keep it somewhere safe, such as Google Drive.</p>
   </div>`;
 }
 async function withTimeout(p, ms){ return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]); }
-async function buildBackup(){
-  const data = { __meta:{ app:'LVL Books', format:2, createdAt:Date.now(), counts:{} } };
-  for(const store of BACKUP_STORES){
-    let rows; try{ rows = await withTimeout(dbAllFresh(store), 8000); }catch(e){ rows = await dbAll(store); }   // full history when reachable, saved copy otherwise
-    data[store] = rows; data.__meta.counts[store] = rows.length;
-  }
-  return data;
-}
-function backupFileName(){ const d=new Date(), p=n=>String(n).padStart(2,'0'); return `LVL-Books-Backup-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.json`; }
-async function downloadBackup(){
-  try{
-    const data = await buildBackup(); const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=backupFileName(); document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 4000);
-    await recordBackupTime(); showToast('Backup file downloaded'); if(state.screen==='backup') render();
-  }catch(e){ console.error(e); tell('Backup failed: '+(e && e.message ? e.message : e)); }
-}
-async function shareBackup(){
-  try{
-    const data = await buildBackup(); const name = backupFileName(); const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-    const file = new File([blob], name, {type:'application/json'});
-    if(navigator.canShare && navigator.canShare({files:[file]})){
-      try{ await navigator.share({files:[file], title:'LVL Books Backup', text:'LVL Books backup'}); await recordBackupTime(); showToast('Backup shared'); if(state.screen==='backup') render(); return; }
-      catch(e){ if(e && e.name==='AbortError') return; }   // cancelled: do nothing; anything else: fall back to a download
-    }
-    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 4000);
-    await recordBackupTime(); showToast('Backup file downloaded'); if(state.screen==='backup') render();
-  }catch(e){ console.error(e); tell('Backup failed: '+(e && e.message ? e.message : e)); }
-}
 async function recordBackupTime(){ await patchSettings({ lastBackupAt: Date.now() }); state.showBackupReminder = false; renderNav(); }
 async function maybeAutoBackup(){
   const s = state.settings;
@@ -3916,7 +4431,66 @@ async function maybeAutoBackup(){
   state.showBackupReminder = !s.lastBackupAt || (Date.now() - s.lastBackupAt) >= TWO_WEEKS;
 }
 function dismissBackupReminder(){ state.showBackupReminder = false; renderNav(); render(); }
-/* Validate a backup file before anything is touched. Returns { ok, error, data, counts, when }. */
+/* ============ Backup & Restore (v13: sections, schema version, checksums, relationship checks, all-or-nothing restore with rollback) ============ */
+const BACKUP_SECTIONS = { customers:['Customers',['customers']], invoices:['Invoices + archive',['invoices','archivedInvoices','deletedInvoices']], memberships:['Memberships',['memberships']], loyalty:['Loyalty & financial ledger',['loyaltyTx','ledger']], payments:['Payment transactions',null], audit:['Audit history',['auditLog']], settings:['Settings & schema version',['settings','accounts']] };
+const BACKUP_LABELS = { customers:'Customers', bsessions:'Gaming sessions', invoices:'Invoices', archivedInvoices:'Archived invoices', deletedInvoices:'Deleted invoices (restorable)', products:'Items', stations:'Gaming setups', expenses:'Expenses', purchases:'Purchases', inventoryTx:'Old stock records', vendors:'Vendors', employees:'Employees', employeeTx:'Employee payments', accounts:'Cash & bank', settings:'Settings', memberships:'Memberships', loyaltyTx:'Loyalty transactions', ledger:'Ledger entries', auditLog:'Audit log', dailyRecords:'Daily totals', physical:'Physical stations' };
+function fnvHex(s){ return hex8(hash32(s))+hex8(hash32(s,0x9747b28c)); }
+async function readStoreFull(store){ try{ return await withTimeout(dbAllFresh(store), 15000); }catch(e){ return await dbAll(store); } }
+async function paymentRows(){
+  const rows = []; const inv = [...(await readStoreFull('invoices')), ...(await readStoreFull('archivedInvoices'))];
+  inv.forEach(i=>(i.payments||(PAY_TO_ACCOUNT[i.paymentMethod]&&i.grandTotal>0?[{method:i.paymentMethod,amount:i.grandTotal,date:i.date}]:[])).forEach((p,k)=>rows.push({ kind:'invoice', invoiceId:i.id, number:i.number, customerId:i.customerId||'', method:p.method, amount:p.amount, date:p.date, n:k })));
+  (await readStoreFull('memberships')).forEach(m=>{ if(m.payment) rows.push({ kind:'membership', membershipId:m.id, receipt:m.receiptNo, customerId:m.customerId||'', method:m.payment.method, amount:m.payment.amount, date:m.payment.date }); });
+  return rows;
+}
+async function buildBackup(section){
+  const full = !section; const stores = full ? BACKUP_STORES : (BACKUP_SECTIONS[section][1]||[]);
+  const data = { __meta:{ app:'LVL Books', format:3, schemaVersion:SCHEMA_VERSION, kind:full?'full':'section', section:section||null, createdAt:Date.now(), counts:{}, checksums:{} } };
+  for(const store of stores){ const rows = await readStoreFull(store); data[store] = rows; data.__meta.counts[store] = rows.length; data.__meta.checksums[store] = fnvHex(JSON.stringify(rows)); }
+  if(section==='payments'){ const rows = await paymentRows(); data.payments = rows; data.__meta.counts.payments = rows.length; data.__meta.checksums.payments = fnvHex(JSON.stringify(rows)); }
+  return data;
+}
+function backupFileName(section){ const d=new Date(), p=n=>String(n).padStart(2,'0'); return `LVL-Books-${section?'Section-'+section+'-':'Backup-'}${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.json`; }
+function saveBlobFile(data, name){ const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 4000); }
+async function downloadBackup(section){
+  try{ const data = await buildBackup(section); saveBlobFile(data, backupFileName(section)); if(!section){ await recordBackupTime(); } showToast(section?'Section file downloaded':'Backup file downloaded'); if(state.screen==='backup') render(); }
+  catch(e){ console.error(e); tell('Backup failed: '+(e && e.message ? e.message : e)); }
+}
+async function shareBackup(){
+  try{
+    const data = await buildBackup(); const name = backupFileName(); const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'}); const file = new File([blob], name, {type:'application/json'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file], title:'LVL Books Backup', text:'LVL Books backup'}); await recordBackupTime(); showToast('Backup shared'); if(state.screen==='backup') render(); return; }
+      catch(e){ if(e && e.name==='AbortError') return; }
+    }
+    saveBlobFile(data, name); await recordBackupTime(); showToast('Backup file downloaded'); if(state.screen==='backup') render();
+  }catch(e){ console.error(e); tell('Backup failed: '+(e && e.message ? e.message : e)); }
+}
+/* In-memory upgrade of an older (v12 or earlier) file so it passes the same checks and restores with customer IDs. */
+function upgradeBackupData(d){
+  const ver = Number(d.__meta && d.__meta.schemaVersion)||0; if(ver>=SCHEMA_VERSION) return d;
+  const byMob = {}; (d.customers||[]).forEach(c=>{ if(!c.cid) c.cid = cidForMobile(c.mobile); byMob[c.mobile] = c.cid; });
+  const link = (s,f)=>(d[s]||[]).forEach(r=>{ if(!r.customerId && r[f] && byMob[r[f]]) r.customerId = byMob[r[f]]; });
+  link('memberships','mobile'); link('loyaltyTx','mobile'); link('invoices','customerMobile'); link('deletedInvoices','customerMobile');
+  return d;
+}
+/* Everything is checked BEFORE anything is touched. errors block the restore; warnings are shown. */
+function backupDeepCheck(d){
+  const errors = [], warnings = []; const rows = s=>Array.isArray(d[s])?d[s]:[]; const meta = d.__meta||{};
+  if(Number(meta.schemaVersion)>SCHEMA_VERSION) errors.push(`This file was made by a newer version of LVL Books (schema ${meta.schemaVersion}). Update the app first.`);
+  if(meta.kind==='section') errors.push('This is a partial (section) file for reference or accounting. Restoring only needs a FULL backup, so a half-restore can never break balances.');
+  if(meta.checksums) for(const s of Object.keys(meta.checksums)){ const have = s==='payments'?d.payments:d[s]; if(Array.isArray(have) && fnvHex(JSON.stringify(have))!==meta.checksums[s]) errors.push(`The “${s}” section does not match its checksum — the file was edited or damaged.`); }
+  for(const s of BACKUP_STORES){ if(!Array.isArray(d[s])) continue; const kp = KEYPATH[s]||'id'; const seen = new Set(), dups = []; d[s].forEach(r=>{ const k = String(r[kp]); if(seen.has(k)) dups.push(k); seen.add(k); }); if(dups.length) errors.push(`Duplicate ${s==='ledger'?'transaction':'record'} IDs in “${s}”: ${dups.slice(0,5).join(', ')}${dups.length>5?' …':''}`); }
+  const nums = {}; [...rows('invoices'), ...rows('archivedInvoices')].forEach(i=>{ (nums[i.number]=nums[i.number]||new Set()).add(i.id); }); const dn = Object.entries(nums).filter(([,s])=>s.size>1).map(([n])=>n); if(dn.length) errors.push(`Duplicate invoice numbers: ${dn.slice(0,5).join(', ')}`);
+  const aIds = new Set(rows('archivedInvoices').map(i=>i.id)); const both = rows('invoices').filter(i=>aIds.has(i.id)).map(i=>i.number); if(both.length) errors.push(`Invoices present both as active and archived: ${both.slice(0,5).join(', ')}`);
+  const cids = new Set(rows('customers').map(c=>c.cid).filter(Boolean)), mobs = new Set(rows('customers').map(c=>c.mobile)); const dc = rows('customers').filter(c=>c.cid); if(new Set(dc.map(c=>c.cid)).size!==dc.length) errors.push('Two customers share the same customer ID.');
+  const custOk = r=>r.customerId ? cids.has(r.customerId) : mobs.has(r.mobile||r.customerMobile);
+  const mm = rows('memberships').filter(m=>!custOk(m)).map(m=>m.receiptNo||m.id); if(mm.length) errors.push(`${mm.length} membership(s) belong to a customer that is not in the file: ${mm.slice(0,4).join(', ')}`);
+  const lm = rows('loyaltyTx').filter(t=>!custOk(t)).map(t=>t.id); if(lm.length) errors.push(`${lm.length} loyalty transaction(s) belong to a customer that is not in the file: ${lm.slice(0,4).join(', ')}`);
+  const im = [...rows('invoices'),...rows('archivedInvoices')].filter(i=>i.customerMobile && !custOk(i)).map(i=>i.number); if(im.length) warnings.push(`${im.length} invoice(s) refer to customers not in the file: ${im.slice(0,4).join(', ')}`);
+  const known = new Set([...rows('invoices'),...rows('archivedInvoices'),...rows('deletedInvoices')].map(i=>i.id)); rows('ledger').filter(l=>l.type==='invoice_purge').forEach(l=>known.add(l.invoiceId));
+  const lr = rows('loyaltyTx').filter(t=>t.invoiceId && !known.has(t.invoiceId)).length + rows('ledger').filter(l=>l.invoiceId && !known.has(l.invoiceId)).length; if(lr) warnings.push(`${lr} loyalty/ledger row(s) refer to invoices that are not in the file. Run the Data Integrity Check after restoring.`);
+  return { errors, warnings };
+}
 function validateBackup(obj){
   if(!obj || typeof obj!=='object' || Array.isArray(obj)) return { ok:false, error:'This file is not an LVL Books backup.' };
   const counts = {}; let known = 0;
@@ -3928,48 +4502,87 @@ function validateBackup(obj){
     counts[store] = obj[store].length; known++;
   }
   if(!known) return { ok:false, error:'No LVL Books data was found in this file.' };
-  return { ok:true, data:obj, counts, when:(obj.__meta && obj.__meta.createdAt) || null };
+  const wasOld = !(obj.__meta && obj.__meta.schemaVersion>=SCHEMA_VERSION); upgradeBackupData(obj);
+  const deep = backupDeepCheck(obj); if(deep.errors.length) return { ok:false, error:deep.errors.join('\n'), warnings:deep.warnings };
+  return { ok:true, data:obj, counts, when:(obj.__meta && obj.__meta.createdAt) || null, warnings:deep.warnings, upgraded:wasOld, schema:(obj.__meta&&obj.__meta.schemaVersion)||2 };
 }
-const BACKUP_LABELS = { customers:'Customers', bsessions:'Gaming sessions', invoices:'Invoices', products:'Items', stations:'Gaming setups', expenses:'Expenses', purchases:'Purchases', inventoryTx:'Old stock records (kept, unused)', vendors:'Vendors', employees:'Employees', accounts:'Cash & bank', settings:'Settings' };
 async function previewRestore(){
   const box = document.getElementById('restorePreview'), btn = document.getElementById('restoreBtn'); window.__restore = null; btn.disabled = true;
   const file = document.getElementById('restoreFile').files[0]; if(!file){ box.textContent=''; return; }
   try{
     const v = validateBackup(JSON.parse(await file.text()));
-    if(!v.ok){ box.innerHTML = `<span style="color:var(--red)">${esc(v.error)}</span>`; return; }
+    if(!v.ok){ box.innerHTML = `<span style="color:var(--red)">${esc(v.error).replace(/\n/g,'<br>')}</span>`; return; }
     window.__restore = v; btn.disabled = false;
-    box.innerHTML = `<b style="color:var(--green,inherit)">Valid backup</b>${v.when?` · made ${new Date(v.when).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'})}`:''}<br>` +
-      Object.keys(BACKUP_LABELS).filter(k=>v.counts[k]!==undefined).map(k=>`${BACKUP_LABELS[k]}: ${v.counts[k]}`).join(' · ');
+    box.innerHTML = `<b style="color:var(--green,inherit)">Valid backup — all checks passed</b>${v.when?` · made ${new Date(v.when).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'})}`:''}${v.upgraded?` · older format (v${v.schema}) will be upgraded`:''}<br>` +
+      Object.keys(BACKUP_LABELS).filter(k=>v.counts[k]!==undefined).map(k=>`${BACKUP_LABELS[k]}: ${v.counts[k]}`).join(' · ') + (v.warnings&&v.warnings.length?`<br><span style="color:var(--amber)">${v.warnings.map(esc).join('<br>')}</span>`:'');
   }catch(e){ box.innerHTML = `<span style="color:var(--red)">Couldn't read this file — it isn't valid backup data.</span>`; }
+}
+/* ---- recovery snapshot kept in the phone's IndexedDB (separate from the cloud database) ---- */
+function recoveryDb(){ return new Promise((res,rej)=>{ const r = indexedDB.open('lvl-recovery',1); r.onupgradeneeded = ()=>r.result.createObjectStore('snap'); r.onsuccess = ()=>res(r.result); r.onerror = ()=>rej(r.error); }); }
+async function recoverySave(key, val){ const db = await recoveryDb(); return new Promise((res,rej)=>{ const t = db.transaction('snap','readwrite'); t.objectStore('snap').put(val,key); t.oncomplete = ()=>{ db.close(); res(); }; t.onerror = ()=>rej(t.error); }); }
+async function recoveryLoad(key){ try{ const db = await recoveryDb(); return await new Promise((res,rej)=>{ const q = db.transaction('snap').objectStore('snap').get(key); q.onsuccess = ()=>{ db.close(); res(q.result); }; q.onerror = ()=>rej(q.error); }); }catch(e){ return null; } }
+/* Write-first-then-prune: every row of the file is written BEFORE anything not in the file is removed, so at no point is data missing. The ledger is append-only and is only ever added to. */
+async function applyDataset(data){
+  for(const store of BACKUP_STORES){
+    if(data[store]===undefined) continue; const kp = KEYPATH[store]||'id'; const rows = data[store];
+    if(store==='ledger'){ const have = new Set((await dbAllFresh('ledger')).map(r=>r.id)); await putMany('ledger', rows.filter(r=>!have.has(r.id))); continue; }
+    await putMany(store, rows);
+    const keep = new Set(rows.map(r=>String(r[kp]))); const stale = (await dbAllFresh(store)).filter(r=>!keep.has(String(r[kp])));
+    for(let i=0;i<stale.length;i+=400) await dbBatch(stale.slice(i,i+400).map(r=>({ del:[store, r[kp]] })));
+  }
+}
+async function verifyDataset(data){
+  for(const store of BACKUP_STORES){ if(data[store]===undefined) continue; const n = (await dbAllFresh(store)).length; if(store==='ledger'? n<data[store].length : n!==data[store].length) throw new Error(`Verification failed for ${BACKUP_LABELS[store]||store}: expected ${data[store].length}, found ${n}.`); }
 }
 async function doRestore(){
   const v = window.__restore; if(!v){ tell('Choose a valid backup file first.'); return; }
   const summary = Object.keys(BACKUP_LABELS).filter(k=>v.counts[k]!==undefined).map(k=>`${BACKUP_LABELS[k]} ${v.counts[k]}`).join(', ');
-  if(!(await askConfirm(`Restore this backup${v.when?' from '+new Date(v.when).toLocaleString('en-IN'):''}?\n\nIt replaces ALL current data with: ${summary}.\n\nTip: download a backup of the current data first.`,'Restore',true))) return;
+  if(!(await askConfirm(`Restore this backup${v.when?' from '+new Date(v.when).toLocaleString('en-IN'):''}?\n\nIt replaces current data with: ${summary}.\n\nA safety snapshot of today's data is saved on this phone first, and the restore is rolled back automatically if anything fails. The ledger is never erased — missing entries are added.`,'Restore',true))) return;
   const btn = document.getElementById('restoreBtn'); if(btn){ btn.disabled=true; btn.textContent='Restoring…'; }
+  let snap = null;
   try{
-    for(const store of BACKUP_STORES){ if(v.data[store]===undefined) continue; await dbClear(store); for(const row of v.data[store]) await dbPut(store, row); }
-    await reseedCounters();
-    await loadSettingsAndSeed(); await rebuildDailyRecords(); await maybeAutoBackup();
-    window.__restore = null; tell('Data restored.'); go('dashboard');
-  }catch(e){ console.error(e); tell('Restore stopped: '+(e && e.message ? e.message : e)+'\nSome data may be partly restored — run the restore again with the same file.'); if(btn){ btn.disabled=false; btn.textContent='Restore Data'; } }
+    snap = await buildBackup(); await recoverySave('preRestore', { createdAt:Date.now(), data:snap });   // safety net FIRST
+    try{ localStorage.setItem('lvl_restore_pending','1'); }catch(e){}
+    try{
+      await applyDataset(v.data); await verifyDataset(v.data); await reseedCounters(); await loadSettingsAndSeed();
+      if(!state.settings.schemaVersion || state.settings.schemaVersion<SCHEMA_VERSION) await runMigrations();
+      await rebuildDailyRecords(); await maybeAutoBackup();
+      await ledgerPost({ type:'restore', description:`Backup restored (${Object.values(v.counts).reduce((a,b)=>a+b,0)} records)`, reason:'Restore from backup' });
+    }catch(e){
+      console.error('restore failed — rolling back', e);
+      try{ await applyDataset(snap); await verifyDataset(snap); await reseedCounters(); await loadSettingsAndSeed(); try{ localStorage.removeItem('lvl_restore_pending'); }catch(_){} tell('Restore failed and was rolled back — your data is exactly as it was before.\n\nReason: '+(e&&e.message?e.message:e)); }
+      catch(e2){ console.error('rollback failed', e2); tell('Restore failed and the automatic rollback could not finish.\n\nYour data is safe in the recovery snapshot on this phone: open Backup & Restore → Recovery and tap “Roll back to snapshot”.'); }
+      if(btn){ btn.disabled=false; btn.textContent='Restore Data'; } return;
+    }
+    try{ localStorage.removeItem('lvl_restore_pending'); }catch(e){}
+    window.__restore = null; tell('Data restored and verified.'); go('dashboard');
+  }catch(e){ console.error(e); tell('Restore did not start: '+(e&&e.message?e.message:e)+'\nNothing was changed.'); if(btn){ btn.disabled=false; btn.textContent='Restore Data'; } }
 }
-async function reseedCounters(){   // so new invoice / session numbers continue after the restored ones
+async function recoveryRollback(){
+  const s = await recoveryLoad('preRestore'); if(!s){ tell('No recovery snapshot found on this phone.'); return; }
+  if(!(await askConfirm(`Roll back to the snapshot saved ${new Date(s.createdAt).toLocaleString('en-IN')}?`,'Roll back',true))) return;
+  try{ await applyDataset(s.data); await verifyDataset(s.data); await reseedCounters(); await loadSettingsAndSeed(); try{ localStorage.removeItem('lvl_restore_pending'); }catch(e){} state.restorePending=false; tell('Rolled back to the snapshot.'); go('dashboard'); }
+  catch(e){ tell('Rollback failed: '+(e.message||e)+'\nThe snapshot is still saved — you can download it and try again.'); }
+}
+async function recoveryDownload(){ const s = await recoveryLoad('preRestore'); if(!s){ tell('No recovery snapshot found.'); return; } saveBlobFile(s.data, 'LVL-Books-Recovery-Snapshot.json'); }
+async function reseedCounters(){   // so new invoice / session numbers continue after the restored ones (archived invoices count too)
   const f = fb();
   for(const store of AUTOINC){
     try{
-      const rows = await dbAllFresh(store); const kp = KEYPATH[store]||'id'; const max = rows.reduce((m,r)=>Math.max(m, Number(r[kp])||0), 0);
+      const rows = await dbAllFresh(store); const kp = KEYPATH[store]||'id'; let max = rows.reduce((m,r)=>Math.max(m, Number(r[kp])||0), 0);
+      if(store==='invoices'){ (await dbAllFresh('archivedInvoices')).forEach(r=>{ max = Math.max(max, Number(r.id)||0); }); }
       const ref = f.doc(f.db,'counters',store); const snap = await f.getDoc(ref); const cur = snap.exists() ? (snap.data().n||0) : 0;
       if(max>cur) await writeAck(f.setDoc(ref,{n:max}));
     }catch(e){ console.warn('counter reseed', store, e); }
   }
 }
 async function doClearAll(){
-  if(!(await askConfirm('This will permanently delete ALL data. Are you sure?'))) return;
-  if(!(await askConfirm('Really sure? This cannot be undone.'))) return;
-  for(const store of BACKUP_STORES){ await dbClear(store); }
+  if(!(await askConfirm('This will permanently delete ALL data (the append-only ledger is kept). Are you sure?'))) return;
+  if(!(await askConfirm('Really sure? This cannot be undone. Download a backup first.'))) return;
+  for(const store of BACKUP_STORES){ if(store==='ledger') continue; await dbClear(store); }
   liveSessions=[]; await loadSettingsAndSeed(); go('dashboard');
 }
+async function screenBackupAsync(){ return screenBackup(); }
 
 /* ============ Demo Data ============ */
 const putSession = async s=>{ s.updatedAt=Date.now(); await dbPut('bsessions', s); updateLiveCache(s); };

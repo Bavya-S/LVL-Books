@@ -281,3 +281,14 @@ Ending a gaming segment now pre-fills at least 60 minutes (10, 30, 45, 59 or 60 
 - Checkout has a *Membership & Loyalty* panel; customer profile shows badge, plan, dates, free hours, points, spending and full histories; More → *Loyalty & Membership Summary* has date-range reports.
 
 New Firestore collections: `memberships`, `loyaltyTx` (covered by the existing rules and backups).
+
+
+## v13 — Membership tab, new-customer enrollment, ledger, archive, integrity, safe restore
+- **Bottom nav:** Dashboard | Session | Invoice | Membership | More. Membership has Members, Plans, Sales, Free hours and Renewals tabs and **＋ Create membership** (Existing or New customer, duplicate-mobile check, price/benefits confirmation, payment or PIN-authorised complimentary activation, receipt).
+- **Customer ID (`cid`):** every customer has a permanent ID; memberships, loyalty rows, invoices and the ledger link to it, so name/mobile changes (Customer profile → Edit customer) never orphan anything.
+- **Deleting an invoice** reverses only that invoice's points (earned/redeemed), free hours and member discounts, once, with linked reversal entries.
+- **Ledger** (`ledger` collection, More → Admin Tools → Transaction ledger): append-only, unique TX IDs. **Deploy the updated `firestore.rules`** so the server also refuses edits/deletes of ledger entries. Restore only adds missing ledger entries; Clear All keeps it.
+- **Archive** (Invoice → Archive): separate `archivedInvoices` collection, read 25 at a time with indexed queries (number, customer ID, date, transaction ID). Reports and daily totals include archived invoices once. Bulk "Archive old invoices" (paid only, Admin PIN).
+- **Data Integrity Check** (More → Admin Tools): 11 checks, affected IDs, safe PIN-approved repairs, repair audit log. Nothing is auto-deleted.
+- **Backup:** full + section files, schema version, checksums, relationship/duplicate-ID validation, safety snapshot in the phone's IndexedDB, automatic rollback if a restore fails, manual "Roll back to snapshot".
+- **Migration:** first launch of v13 assigns customer IDs, links records and back-fills the ledger (idempotent, safe to re-run).
