@@ -292,3 +292,30 @@ New Firestore collections: `memberships`, `loyaltyTx` (covered by the existing r
 - **Data Integrity Check** (More → Admin Tools): 11 checks, affected IDs, safe PIN-approved repairs, repair audit log. Nothing is auto-deleted.
 - **Backup:** full + section files, schema version, checksums, relationship/duplicate-ID validation, safety snapshot in the phone's IndexedDB, automatic rollback if a restore fails, manual "Roll back to snapshot".
 - **Migration:** first launch of v13 assigns customer IDs, links records and back-fills the ledger (idempotent, safe to re-run).
+
+## v14 — Production performance & test-data removal
+
+**Offline-first speed.** The local database is the source of truth; the cloud is only a background copy.
+- *Start Session* is synchronous: the session is saved locally and opened at once (about 10–25 ms offline; it was about 9 s). No loading screen, no cloud wait.
+- Every save writes to the in-memory mirror and Firestore's local database immediately and uploads later. Nothing in the app waits for the cloud any more.
+- Session edits (adding items, extending time) work on the device's own latest copy in one uninterrupted step, with no cloud transaction (about 1 ms offline; it was about 9 s).
+- IDs are issued on the device from blocks of numbers reserved from the cloud counter while online, so two phones never overlap. If a phone has never been online it continues from the highest number it has seen.
+- Invoice and membership numbers use a cloud transaction only when the connection is healthy, waiting at most about 1.2 s. If the cloud does not answer, or you are offline, the number is issued locally and the cloud is not tried again for a minute.
+- Saving a record identical to the stored one writes nothing. The echo of your own save coming back from the cloud repaints nothing.
+
+**Targeted updates.** The dashboard redraws only the session card that changed (verified: the other cards keep the same DOM nodes). Dashboard totals, report data and the customer search index are cached and invalidated by per-store revision counters.
+
+**Large data.** Customer search is indexed (20,000 customers: about 1–7 ms per keystroke). Invoices and customers load 50 at a time with *Show more*, and search runs over precomputed text. Reports are cached per date range and invalidated when a relevant record changes. Loyalty and membership lookups touch only the affected customer.
+
+**Safer checkout.** The invoice and the "session is billed" mark are written in one all-or-nothing batch, so a failure leaves no partial invoice and the session stays open. Taps on Start Session and Finalize are guarded, so repeated taps create one session or one invoice.
+
+**Removed.** *Load Demo Data* and every other generator, load-test or test-only hook are gone from the app; none is reachable from any screen.
+
+**More → Admin Tools → Test-data review (Admin only).** Removes leftover demo records from earlier builds, safely:
+1. Scan only (nothing is changed).
+2. A record counts as *confirmed* only when several independent fields match what the old demo generator produced AND the records it links to all came from the same demo run (names or amounts alone are never enough).
+3. Anything that merely looks test-like is **flagged for review** and left untouched; you can keep it or remove it one by one.
+4. A full backup is made and stored before the first deletion (also offered as a download).
+5. Deletion goes in dependency order (invoice → payments/ledger/loyalty/accounts → session → customer), then daily totals and balances are recalculated, an orphan/integrity check runs, and the run is written to the audit log.
+
+**Tested** (simulated Firestore in a throwaway browser profile; the generated data never touches your database): offline start, 16 items, 31 simultaneous sessions, checkout, 20,000 customers, 6,000 invoices, membership/loyalty with 8,000 loyalty rows, restart, flaky cloud, double taps, cleanup on mixed real and demo records. Not tested on a physical phone or against the live Firebase project.

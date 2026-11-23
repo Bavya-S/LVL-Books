@@ -388,65 +388,108 @@ const AUTOINC = new Set(['bsessions','invoices','products','expenses','vendors',
 const WINDOWED = { invoices:{field:'date',days:120}, bsessions:{field:'startTime',days:120} };
 const __cache = {}, __ready = {};
 function clean(v){ return v===undefined ? v : JSON.parse(JSON.stringify(v)); }   // deep copy; also strips undefined (Firestore rejects it)
-function writeAck(p){   // never let a missing signal freeze the UI: wait briefly for the server, then continue (the write is queued locally)
-  p.catch(e=>{ console.error('Cloud write failed', e); try{ showToast('⚠️ A change could not be saved to the cloud: '+(e.code||e.message)); }catch(_){} });
-  return Promise.race([p, new Promise(res=>setTimeout(res,3000))]);
+/* ---- connectivity: best effort only. Firestore keeps working from its saved local copy whether or not there is signal. ---- */
+let __cloudBadAt = 0;
+function isOnline(){ return navigator.onLine!==false; }
+function cloudLikely(){ return isOnline() && !(__cloudBadAt && Date.now()-__cloudBadAt<60000); }   // after a failed attempt, don't even try for a minute
+/* LOCAL-FIRST: every write lands in the in-memory mirror and Firestore's persistent local database immediately and is
+   synced to the cloud later, in the background. Nothing in the app ever waits for the cloud. A failed upload is reported. */
+function writeAck(p){
+  p.then(()=>{ __cloudBadAt = 0; }, e=>{ console.error('Cloud write failed', e); try{ showToast('⚠️ A change could not be saved to the cloud: '+(e.code||e.message)); }catch(_){} });
+  return Promise.resolve();
 }
-async function nextId(store){
-  const f = fb(); const ref = f.doc(f.db,'counters',store);
-  try{ return await f.runTransaction(f.db, async t=>{ const snap=await t.get(ref); const n=(snap.exists()?(snap.data().n||0):0)+1; t.set(ref,{n}); return n; }); }
-  catch(e){ return Math.floor(Date.now()/1000)*100 + Math.floor(Math.random()*100); }   // offline fallback: unique, not sequential
+function stable(v){ return JSON.stringify(v, (k,x)=> (x && typeof x==='object' && !Array.isArray(x)) ? Object.keys(x).sort().reduce((o,kk)=>(o[kk]=x[kk],o),{}) : x); }
+/* revision counters: bumped whenever a store changes, so derived data (dashboard totals, report results, search indexes) can be cached and invalidated precisely */
+const __rev = {}, __memo = {};
+function bumpRev(s){ __rev[s] = (__rev[s]||0)+1; }
+function revOf(stores){ return stores.map(s=>__rev[s]||0).join('.'); }
+function memo(key, stores, fn){ const r = revOf(stores); const m = __memo[key]; if(m && m.r===r) return m.v; const v = fn(); __memo[key] = { r, v }; return v; }
+const __lw = {};   // store|key → time of our own last write (so a late echo of it can never overwrite a newer local change)
+function markLocal(store,k){ const n=Date.now(); __lw[store+'|'+k]=n; if(Object.keys(__lw).length>600){ for(const x in __lw) if(n-__lw[x]>5000) delete __lw[x]; } }
+function lsGet(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+/* IDs are issued on the device, instantly, from blocks of numbers reserved from the cloud counter while online (so two phones never overlap).
+   With no block available (never been online) the next number after the highest one seen is used. */
+const ID_BLOCK = 25, __idReserving = {};
+function localMaxId(store){ let m=0; if(__ready[store]) __cache[store].forEach((v,k)=>{ const n=Number(k); if(n>m && n<1e9) m=n; }); return m; }
+function nextIdLocal(store){
+  const hi = Math.max(localMaxId(store), Number(lsGet('lvl_idhi_'+store))||0);
+  const blocks = lsGet('lvl_idblk_'+store) || []; let id = 0;
+  while(blocks.length){ const b = blocks[0]; if(b.next<=hi) b.next = hi+1; if(b.next>b.end){ blocks.shift(); continue; } id = b.next++; break; }
+  if(!id) id = hi+1;
+  lsSet('lvl_idblk_'+store, blocks); lsSet('lvl_idhi_'+store, id);
+  topUpIdBlock(store);
+  return id;
 }
-async function dbAll(store){
+function topUpIdBlock(store){
+  const blocks = lsGet('lvl_idblk_'+store) || [];
+  const left = blocks.reduce((a,b)=>a+Math.max(0,b.end-b.next+1),0);
+  const f = fb(); if(!f || left>=8 || __idReserving[store] || !cloudLikely()) return;
+  __idReserving[store] = true; let abandoned = false;
+  const ref = f.doc(f.db,'counters',store);
+  const to = setTimeout(()=>{ abandoned = true; __idReserving[store] = false; __cloudBadAt = Date.now(); }, 6000);
+  f.runTransaction(f.db, async t=>{ if(abandoned) throw new Error('abandoned'); const snap = await t.get(ref); const n = Math.max(snap.exists()?(snap.data().n||0):0, localMaxId(store)); t.set(ref,{n:n+ID_BLOCK}); return n; })
+    .then(n=>{ clearTimeout(to); if(abandoned) return; const bl = lsGet('lvl_idblk_'+store) || []; bl.push({ next:n+1, end:n+ID_BLOCK }); lsSet('lvl_idblk_'+store, bl); __idReserving[store] = false; })
+    .catch(()=>{ clearTimeout(to); __idReserving[store] = false; });
+}
+async function dbAll(store){   // a private deep copy: safe to modify
   if(__ready[store]) return clean([...__cache[store].values()]);
   const f = fb(); const snap = await f.getDocs(f.collection(f.db, store)); return snap.docs.map(d=>d.data());
 }
+function dbAllRO(store){   // the live in-memory records, NOT copied: read-only, instant. Never modify what it returns.
+  return __ready[store] ? [...__cache[store].values()] : [];
+}
+function dbGetRO(store, key){ return __ready[store] ? __cache[store].get(String(key)) : undefined; }
 async function dbGet(store, key){
   const k = String(key);
   if(__ready[store] && __cache[store].has(k)) return clean(__cache[store].get(k));
   if(__ready[store] && !WINDOWED[store]) return undefined;
   const f = fb(); const snap = await f.getDoc(f.doc(f.db, store, k)); return snap.exists() ? snap.data() : undefined;
 }
-async function dbPut(store, val){
-  const f = fb(); const kp = KEYPATH[store] || 'id'; val = Object.assign(val, clean(val));   // strip undefined in place
-  if(AUTOINC.has(store) && (val[kp]===undefined || val[kp]===null)) val[kp] = await nextId(store);
+function dbPutNow(store, val){   // synchronous core of every save: instant, local-first
+  const f = fb(); const kp = KEYPATH[store] || 'id'; Object.assign(val, clean(val));   // strip undefined in place
+  if(AUTOINC.has(store) && (val[kp]===undefined || val[kp]===null)) val[kp] = nextIdLocal(store);
   const data = clean(val); const k = String(val[kp]);
-  if(__ready[store]) __cache[store].set(k, data);   // write-through: visible to the very next read
-  await writeAck(f.setDoc(f.doc(f.db, store, k), data));
+  if(__ready[store]){
+    const old = __cache[store].get(k);
+    if(old && stable(old)===stable(data)) return val[kp];   // identical to what is already saved: no duplicate write
+    __cache[store].set(k, data);   // write-through: visible to the very next read
+  }
+  bumpRev(store); markLocal(store,k);
+  writeAck(f.setDoc(f.doc(f.db, store, k), data));
   return val[kp];
 }
+async function dbPut(store, val){ return dbPutNow(store, val); }
 async function dbDel(store, key){
   const f = fb(); const k = String(key); if(__ready[store]) __cache[store].delete(k);
-  await writeAck(f.deleteDoc(f.doc(f.db, store, k)));
+  bumpRev(store); markLocal(store,k); writeAck(f.deleteDoc(f.doc(f.db, store, k)));
 }
 async function dbClear(store){
   const f = fb(); const snap = await f.getDocs(f.collection(f.db, store)); const docs = snap.docs;
   for(let i=0;i<docs.length;i+=400){ const b=f.writeBatch(f.db); docs.slice(i,i+400).forEach(d=>b.delete(d.ref)); await writeAck(b.commit()); }
-  if(__ready[store]) __cache[store].clear();
+  if(__ready[store]) __cache[store].clear(); bumpRev(store);
 }
-async function dbIncrement(store, key, field){   // atomic across devices (so two phones can never issue the same invoice number)
+/* Counters (invoice numbers, membership receipts). With a working connection this is a cloud transaction, so two phones can never
+   issue the same number; with no connection — or if the cloud does not answer within a moment — the number is issued locally at once. */
+async function dbIncrement(store, key, field){
   const f = fb(); const k = String(key); const ref = f.doc(f.db, store, k);
-  try{
-    const v = await f.runTransaction(f.db, async t=>{ const snap=await t.get(ref); const d=snap.exists()?snap.data():{}; const cur=d[field]||1; t.set(ref, Object.assign({}, d, {[field]:cur+1})); return cur; });
-    if(__ready[store] && __cache[store].has(k)) __cache[store].get(k)[field] = v+1;
-    return v;
-  }catch(e){ const d=(await dbGet(store,key))||{}; const v=d[field]||1; d[field]=v+1; await dbPut(store,d); return v; }
+  const local = ()=>{ const d = clean(dbGetRO(store,key)) || {}; const v = d[field]||1; d[field] = v+1; dbPutNow(store, d); return v; };
+  if(!cloudLikely()) return local();
+  let abandoned = false;
+  const tx = f.runTransaction(f.db, async t=>{ if(abandoned) throw new Error('abandoned'); const snap=await t.get(ref); const d=snap.exists()?snap.data():{}; const cur=d[field]||1; t.set(ref, Object.assign({}, d, {[field]:cur+1})); return cur; }).then(v=>({v}), ()=>null);
+  const r = await Promise.race([tx, new Promise(res=>setTimeout(()=>res('timeout'),1200))]);
+  if(r && r!=='timeout'){ if(__ready[store] && __cache[store].has(k)){ __cache[store].get(k)[field] = r.v+1; bumpRev(store); } return r.v; }
+  abandoned = true; __cloudBadAt = Date.now(); return local();
 }
-async function dbUpdate(store, key, fn){   // read-modify-write as ONE atomic step, so concurrent edits from several phones are never lost
-  const f = fb(), k = String(key), ref = f.doc(f.db, store, k);
-  try{
-    let out;
-    const doc = await f.runTransaction(f.db, async t=>{
-      const snap = await t.get(ref); const d = snap.exists() ? snap.data() : undefined;
-      try{ out = fn(d); }catch(e){ e.__app = true; throw e; }
-      t.set(ref, clean(d)); return d;
-    });
-    if(__ready[store]) __cache[store].set(k, clean(doc));
-    return { doc, result:out };
-  }catch(e){
-    if(e && e.__app) throw e;
-    const d = clean(await dbGet(store, key)); const result = fn(d); await dbPut(store, d); return { doc:d, result };   // offline: apply locally, Firestore syncs later
-  }
+/* Read-modify-write on the device's own latest copy, in one uninterrupted step (nothing is awaited between read and write),
+   so two quick taps can never overwrite each other. It never waits for the network. */
+async function dbUpdate(store, key, fn){
+  const k = String(key); let cur = dbGetRO(store,key);
+  if(cur===undefined){ cur = await dbGet(store,key); const again = dbGetRO(store,key); if(again!==undefined) cur = again; }
+  const d = cur===undefined ? undefined : clean(cur);
+  let result; try{ result = fn(d); }catch(e){ e.__app = true; throw e; }
+  if(d!==undefined) dbPutNow(store, d);
+  return { doc:d, result };
 }
 let __renderTimer = null;
 function scheduleRender(){   // debounced; never repaints while someone is typing in a form field
@@ -458,6 +501,41 @@ function scheduleRender(){   // debounced; never repaints while someone is typin
     try{ render(); }catch(e){}
   }, 300);
 }
+/* A snapshot is applied by comparing it with what we already hold: the echo of our own write changes nothing and repaints nothing. */
+function applySnapshot(store, snap, first){
+  const prev = __cache[store]; const changed = [];
+  const ch = (!first && prev && typeof snap.docChanges==='function') ? snap.docChanges() : null;
+  const f = fb();
+  if(!ch){
+    const next = new Map(snap.docs.map(d=>[d.id, d.data()]));
+    if(prev && !first){ next.forEach((v,id)=>{ const o=prev.get(id); if(!o || stable(o)!==stable(v)) changed.push(id); }); prev.forEach((v,id)=>{ if(!next.has(id)) changed.push(id); }); } else changed.push('*');
+    __cache[store] = next; __ready[store] = true; return changed;
+  }
+  ch.forEach(c=>{
+    const id = c.doc.id; const mine = __lw[store+'|'+id] && Date.now()-__lw[store+'|'+id] < 1500;
+    if(c.type==='removed'){ if(mine) return; if(prev.delete(id)) changed.push(id); return; }
+    const v = c.doc.data(), o = prev.get(id);
+    if(o && stable(o)===stable(v)) return;   // our own write coming back
+    if(mine){   // a snapshot that overlaps a very recent local write: keep ours, double-check shortly
+      setTimeout(async()=>{ try{ const s = await f.getDoc(f.doc(f.db,store,id)); const nv = s.exists()?s.data():undefined; const cur = __cache[store].get(id);
+        if(Date.now()-(__lw[store+'|'+id]||0) < 1400) return; if(nv===undefined ? cur!==undefined : (!cur || stable(cur)!==stable(nv))){ if(nv===undefined) __cache[store].delete(id); else __cache[store].set(id,nv); afterSync(store,[id]); } }catch(e){} }, 1700);
+      return;
+    }
+    prev.set(id, v); changed.push(id);
+  });
+  return changed;
+}
+function afterSync(store, changed){
+  if(!changed.length) return;
+  bumpRev(store);
+  if(store==='settings'){ const m = __cache.settings.get('main'); if(m) state.settings = m; }
+  if(store==='bsessions'){
+    if(changed[0]==='*') liveSessions = [...__cache.bsessions.values()].filter(x=>isOpenStatus(x.status));
+    else changed.forEach(id=>{ const s = __cache.bsessions.get(String(id)); if(s) updateLiveCache(s); else liveSessions = liveSessions.filter(x=>String(x.id)!==String(id)); });
+    if(state.screen==='dashboard' && changed[0]!=='*' && changed.every(id=>patchDashSession(id))) return;   // only the affected session cards are redrawn
+  }
+  scheduleRender();
+}
 function startSync(){
   const f = fb();
   return new Promise(resolveAll=>{
@@ -466,11 +544,10 @@ function startSync(){
       let first = true; const w = WINDOWED[store]; const col = f.collection(f.db, store);
       const q = w ? f.query(col, f.where(w.field, '>=', Date.now()-w.days*86400000)) : col;
       f.onSnapshot(q, snap=>{
-        __cache[store] = new Map(snap.docs.map(d=>[d.id, d.data()])); __ready[store] = true;
-        if(store==='bsessions') liveSessions = snap.docs.map(d=>d.data()).filter(x=>isOpenStatus(x.status));
-        if(store==='settings'){ const m = __cache.settings.get('main'); if(m) state.settings = m; }
-        if(first){ first=false; done(); } else scheduleRender();
-      }, err=>{ console.error('Real-time sync error on', store, err); if(first){ first=false; done(); } });
+        const changed = applySnapshot(store, snap, first);
+        if(first){ first = false; if(store==='bsessions') liveSessions = [...__cache.bsessions.values()].filter(x=>isOpenStatus(x.status)); if(store==='settings'){ const m=__cache.settings.get('main'); if(m) state.settings=m; } bumpRev(store); done(); }
+        else afterSync(store, changed);
+      }, err=>{ console.error('Real-time sync error on', store, err); if(first){ first = false; done(); } });
     });
     setTimeout(()=>resolveAll(), 6000);   // never hold the app hostage to the network
   });
@@ -700,6 +777,8 @@ async function boot(){
   try{ state.restorePending = localStorage.getItem('lvl_restore_pending')==='1'; }catch(e){}
   window.__migration = runMigrations().catch(e=>{ console.error('migration', e); return { error:String(e) }; });   // upgrades older data in the background; safe to repeat
   await maybeAutoBackup();
+  ['bsessions','invoices','expenses','memberships','loyaltyTx'].forEach(topUpIdBlock);   // reserve ID blocks while online so IDs are issued instantly later, even offline
+  setTimeout(housekeeping, 5000);
   setupManifestAndInstall();
   setupNavigation(); setupPullToRefresh(); setupChartTips();
   bootDone = true;
@@ -732,8 +811,9 @@ function aggregateDaily(records, keyFn, limit){
   return Object.values(map).sort((a,b)=>a.key.localeCompare(b.key)).slice(-limit);
 }
 async function updateDailyRecord(dateStr){
-  const invoices = (await dbAll('invoices')).filter(i=>dateKey(i.date)===dateStr);
-  const expenses = (await dbAll('expenses')).filter(e=>!e.isTemplate && dateKey(e.date)===dateStr);
+  const [y,m,d] = dateStr.split('-').map(Number); const t0 = new Date(y,m-1,d).getTime(), t1 = new Date(y,m-1,d+1).getTime();
+  const invoices = dbAllRO('invoices').filter(i=>i.date>=t0 && i.date<t1);
+  const expenses = dbAllRO('expenses').filter(e=>!e.isTemplate && e.date>=t0 && e.date<t1);
   invoices.push(...(await archivedOnDay(dateStr)));   // archived invoices of that day still count (they are in a separate store, so never counted twice)
   const sales = invoices.reduce((s,i)=>s+i.grandTotal,0);
   const exp = expenses.reduce((s,e)=>s+e.amount,0);
@@ -1007,7 +1087,7 @@ async function render(){
     vendors:screenVendors, vendorProfile:screenVendorProfile, purchases:screenPurchases, employees:screenEmployees, employeeProfile:screenEmployeeProfile,
     cashbank:screenCashBank, reports:screenReports, session:screenSession, checkout:screenCheckout, invoiceView:screenInvoiceView,
     set_items:screenSetItems, set_stations:screenSetStations, set_pricing:screenSetPricing, set_custom:screenSetCustom, set_overtime:screenSetOvertime,
-    set_accompany:screenSetAccompany, picker:screenPicker, itemInfo:screenItemInfo, set_physical:screenSetPhysical, set_tax:screenSetTax, set_invoice:screenSetInvoice, set_business:screenSetBusiness, set_perm:screenSetPerm, adminInvoices:screenAdminInvoices, membership:screenMembership, adminTools:screenAdminTools, integrity:screenIntegrity, ledgerView:screenLedger, loyalty:screenLoyalty, lmReports:screenLmReports };
+    set_accompany:screenSetAccompany, picker:screenPicker, itemInfo:screenItemInfo, set_physical:screenSetPhysical, set_tax:screenSetTax, set_invoice:screenSetInvoice, set_business:screenSetBusiness, set_perm:screenSetPerm, adminInvoices:screenAdminInvoices, membership:screenMembership, adminTools:screenAdminTools, integrity:screenIntegrity, cleanup:screenCleanup, ledgerView:screenLedger, loyalty:screenLoyalty, lmReports:screenLmReports };
   const fn = SCREENS[state.screen] || screenDashboard;
   let body;
   try{ body = await fn(); }
@@ -1035,11 +1115,8 @@ async function render(){
 /* ============ In-app dialogs ============ */
 /* Native tell()/(await askConfirm()) can be silently suppressed by phone browsers ("prevent this page from creating more
    dialogs") — a suppressed (await askConfirm()) makes buttons like Delete appear dead. All prompts therefore use these. */
-window.__dialogLog = window.__dialogLog || [];
 function dlgRoot(){ let r=document.getElementById('dlgRoot'); if(!r){ r=document.createElement('div'); r.id='dlgRoot'; document.body.appendChild(r); } return r; }
 function askChoice(message, choices){   // choices: [{label,value,cls}] → resolves with the chosen value (null if dismissed)
-  window.__dialogLog.push(String(message));
-  if(window.__autoChoice!==undefined){ const v = typeof window.__autoChoice==='function' ? window.__autoChoice(message, choices) : window.__autoChoice; return Promise.resolve(v); }
   return new Promise(resolve=>{
     const bg=document.createElement('div'); bg.className='dlg-bg'; bg.setAttribute('role','alertdialog'); bg.setAttribute('aria-modal','true');
     const box=document.createElement('div'); box.className='dlg';
@@ -1053,11 +1130,9 @@ function askChoice(message, choices){   // choices: [{label,value,cls}] → reso
   });
 }
 function askConfirm(message, okText, danger){
-  if(window.__autoConfirm!==undefined){ window.__dialogLog.push(String(message)); return Promise.resolve(!!window.__autoConfirm); }
   return askChoice(message, [{label:'Cancel',value:false},{label:okText||'OK',value:true,cls:danger?'danger':'primary'}]).then(v=>v===true);
 }
 function tell(message){
-  if(window.__autoConfirm!==undefined){ window.__dialogLog.push(String(message)); return Promise.resolve(); }
   return askChoice(message, [{label:'OK',value:true,cls:'primary'}]);
 }
 function showToast(msg){
@@ -1093,7 +1168,7 @@ function mutateSession(sid, fn){
       if(!sesEditable(d)) throw new Error(`This session is ${STATUS_LABEL[d.status]} and can't be edited. To correct a finalized bill use Credit / Refund on its invoice.`);
       const out = fn(d); d.updatedAt = Date.now(); return out;
     });
-    updateLiveCache(r.doc); return r.result;
+    updateLiveCache(r.doc); patchDashSession(sid); return r.result;   // if the dashboard is showing, only this session's card is redrawn
   };
   const p = (__sesQueue[sid]||Promise.resolve()).then(run, run);
   __sesQueue[sid] = p.catch(()=>{});
@@ -1126,7 +1201,7 @@ function gamingTitle(l){ return /Player/.test(l.name||'') ? l.name : `${l.name} 
 /* A physical console may only be in ONE running segment at a time; many segments of the same MODEL are always fine. */
 async function physicalBusy(physId, exceptSid, exceptLid){
   if(!physId) return null;
-  const all = (await dbAll('bsessions')).filter(x=>isOpenStatus(x.status));
+  const all = liveSessions.filter(x=>isOpenStatus(x.status));
   for(const x of all) for(const l of x.lines) if(l.kind==='gaming' && l.physicalId===physId && l.state!=='ended' && !(x.id===exceptSid && l.id===exceptLid)) return { sid:x.id, lid:l.id, code:sesCode(x) };
   return null;
 }
@@ -1136,11 +1211,13 @@ async function afterLineChange(sid){
 }
 
 /* ---- start / open ---- */
-async function startSession(){
+let __startLock = false;
+function startSession(){   // instant: the session is created in memory + the local database and opened at once; nothing waits for the cloud
+  if(__startLock) return; __startLock = true; setTimeout(()=>{ __startLock = false; }, 700);   // a double-tap can never create two sessions
   const s = { status:'active', startTime:Date.now(), groupName:'', notes:'', customerName:'', customerMobile:'', lines:[], nextLineId:1, invoiceId:null };
-  await createRecord('bsessions', s); updateLiveCache(s);
+  dbPutNow('bsessions', s); updateLiveCache(s);
   showToast('Session '+sesCode(s)+' started');
-  openSession(s.id);
+  return openSession(s.id);
 }
 function openSession(id){ state.sessionId = id; state.billEdSid = null; state.reorder = false; state.ii = null; return go('session'); }
 
@@ -1301,6 +1378,34 @@ function custMatches(custs, raw, mode){
   out.sort((a,b)=>a.t-b.t || (b.c.lastVisit||'').toString().localeCompare((a.c.lastVisit||'').toString()) || String(a.c.name).localeCompare(String(b.c.name)));
   return out.slice(0,6).map(x=>x.c);
 }
+/* Customer search index: built once per change to the customer list (prefix table on the first 1-3 letters of every word, plus precomputed lowercase
+   name / mobile strings), so a keystroke only touches a handful of candidates instead of re-reading and re-parsing every customer. */
+function custIndex(){
+  return memo('custIdx', ['customers'], ()=>{
+    const ents = dbAllRO('customers').map(c=>{ const n = String(c.name||'').toLowerCase(); return { c, n, words:n.split(/\s+/).filter(Boolean), nk:null, m:String(c.mobile||'') }; });
+    const pre = new Map();
+    ents.forEach(e=>{ const seen = new Set(); e.words.forEach(w=>{ for(let k=1;k<=3;k++){ const key = w.slice(0,k); if(seen.has(key)) continue; seen.add(key); let a = pre.get(key); if(!a){ a=[]; pre.set(key,a); } a.push(e); } }); });
+    return { ents, pre };
+  });
+}
+function custRank(out){ out.sort((a,b)=>a.t-b.t || (b.c.lastVisit||'').toString().localeCompare((a.c.lastVisit||'').toString()) || String(a.c.name).localeCompare(String(b.c.name))); return out.slice(0,6).map(x=>x.c); }
+function custSearch(raw, mode){
+  const q = String(raw||'').trim(); if(!q) return [];
+  const { ents, pre } = custIndex(); const out = [];
+  if(mode==='mobile'){
+    const d = q.replace(/\D/g,''); if(d.length<2) return [];
+    for(const e of ents){ const i = e.m.indexOf(d); if(i>=0) out.push({ c:e.c, t: i===0?0 : e.m.endsWith(d)?1 : 2 }); }
+    return custRank(out);
+  }
+  const ql = q.toLowerCase(), qk = nameKey(q), first = ql.split(/\s+/)[0];
+  const cands = pre.get(first.slice(0,3)) || [], got = new Set();
+  for(const e of cands){ if(e.n.startsWith(ql) || e.words.some(w=>w.startsWith(ql))){ out.push({ c:e.c, t:0 }); got.add(e); } }
+  const stage = (t, test)=>{ if(out.length>=6) return; for(const e of ents){ if(got.has(e) || !e.n) continue; if(test(e)){ out.push({ c:e.c, t }); got.add(e); } } };
+  stage(1, e=>e.n.includes(ql));
+  stage(2, e=>{ if(qk.length<2) return false; if(e.nk===null) e.nk = nameKey(e.n); return e.nk.includes(qk); });
+  stage(3, e=>ql.length>=3 && e.words.some(w=>editDistance1(w.slice(0,ql.length),ql) || editDistance1(w.slice(0,ql.length+1),ql) || editDistance1(w.slice(0,ql.length-1),ql)));
+  return custRank(out);
+}
 function fmtMobile(m){ m=String(m||''); return m.length===10 ? '+91 '+m.slice(0,5)+' '+m.slice(5) : m; }
 let __acTimer = null;
 /* attach a suggestion dropdown to an input. onPick(customer) fills the form. */
@@ -1319,7 +1424,7 @@ function attachCustomerSuggest(input, mode, onPick){
   const pick = i=>{ const c = items[i]; if(!c) return; close(); input.blur && 0; onPick(c); };
   const search = async()=>{
     if(dismissed) return;
-    const custs = await dbAll('customers'); items = custMatches(custs, input.value, mode); idx = -1; paint();
+    items = custSearch(input.value, mode); idx = -1; paint();
   };
   input.addEventListener('input', ()=>{ clearTimeout(bt); dismissed = false; search(); });
   input.addEventListener('focus', ()=>{ clearTimeout(bt); if(input.value.trim() && !dismissed) search(); });
@@ -1799,19 +1904,39 @@ function sessionCard(s){
       <button class="btn sm danger" onclick="cancelSessionModal(${s.id})">Cancel Session</button>
     </div></div>`;
 }
+function dashStats(){   // today's totals: recomputed only when invoices or expenses actually changed (and when the date rolls over)
+  return memo('dash:'+dateKey(Date.now()), ['invoices','expenses'], ()=>{
+    const invoices = dbAllRO('invoices'), expenses = dbAllRO('expenses').filter(e=>!e.isTemplate);
+    const todayInv = invoices.filter(i=>isToday(i.date)), todayExp = expenses.filter(e=>isToday(e.date));
+    return { gamingRev: todayInv.reduce((s,i)=>s+(i.gamingAmount||0)+(i.accompanyAmount||0)+(i.overtimeAmount||0),0),
+      foodRev: todayInv.reduce((s,i)=>s+(i.foodAmount||0),0), salesTotal: todayInv.reduce((s,i)=>s+i.grandTotal,0),
+      expTotal: todayExp.reduce((s,e)=>s+e.amount,0), receivable: invoices.reduce((s,i)=>s+Math.max(0,invoiceBalance(i)),0) };
+  });
+}
+function openSessionsSorted(){ return liveSessions.filter(x=>isOpenStatus(x.status)).sort((a,b)=>a.startTime-b.startTime); }
+const SESS_EMPTY = `<div class="empty" id="actEmpty">No active sessions.<br><br><button class="btn primary sm" onclick="startSession()">Start Session</button></div>`;
+/* Redraw ONE session card in place (or add / remove it). Returns false when the dashboard isn't showing, so the caller does a normal render. */
+function patchDashSession(id){
+  if(state.screen!=='dashboard') return false;
+  const host = document.getElementById('actList'); if(!host) return false;
+  const sid = Number(id); const s = liveSessions.find(x=>x.id===sid && isOpenStatus(x.status));
+  const el = host.querySelector(`.sess-card[data-sid="${sid}"]`);
+  if(!s){ if(el) el.remove(); }
+  else if(el){ el.outerHTML = sessionCard(s); }
+  else {
+    const tmp = document.createElement('div'); tmp.innerHTML = sessionCard(s); const card = tmp.firstElementChild;
+    const after = [...host.querySelectorAll('.sess-card')].find(c=>{ const o = liveSessions.find(x=>x.id===Number(c.dataset.sid)); return o && o.startTime > s.startTime; });
+    host.insertBefore(card, after||null);
+  }
+  const n = host.querySelectorAll('.sess-card').length;
+  const e = document.getElementById('actEmpty'); if(n && e) e.remove(); else if(!n && !e) host.insertAdjacentHTML('beforeend', SESS_EMPTY);
+  const c = document.getElementById('actCount'); if(c) c.textContent = '· '+n+' open ';
+  return true;
+}
 async function screenDashboard(){
-  const invoices = await dbAll('invoices');
-  const expenses = (await dbAll('expenses')).filter(e=>!e.isTemplate);
-  const open = (await dbAll('bsessions')).filter(x=>isOpenStatus(x.status)).sort((a,b)=>a.startTime-b.startTime);
-  const todayInv = invoices.filter(i=>isToday(i.date));
-  const todayExp = expenses.filter(e=>isToday(e.date));
-  const gamingRev = todayInv.reduce((s,i)=>s+(i.gamingAmount||0)+(i.accompanyAmount||0)+(i.overtimeAmount||0),0);
-  const foodRev = todayInv.reduce((s,i)=>s+(i.foodAmount||0),0);
-  const salesTotal = todayInv.reduce((s,i)=>s+i.grandTotal,0);
-  const expTotal = todayExp.reduce((s,e)=>s+e.amount,0);
-  const receivable = invoices.reduce((s,i)=>s+Math.max(0,invoiceBalance(i)),0);
-  const activeSetups = open.reduce((n,x)=>n+x.lines.filter(l=>l.kind==='gaming'&&l.state!=='ended').length,0);
-  const recTemplates = (await dbAll('expenses')).filter(e=>e.isTemplate && e.nextDue<=Date.now());
+  const open = openSessionsSorted(), st = dashStats();
+  const { gamingRev, foodRev, salesTotal, expTotal, receivable } = st;
+  const recTemplates = dbAllRO('expenses').filter(e=>e.isTemplate && e.nextDue<=Date.now());
   return `
   <button class="btn primary" style="margin-bottom:12px;min-height:50px" onclick="startSession()">Start Session</button>
   <div class="section-title">Today's Summary</div>
@@ -1823,8 +1948,8 @@ async function screenDashboard(){
     <div class="stat"><div class="v">${fmt(foodRev)}</div><div class="l">Food & beverage</div></div>
     <div class="stat"><div class="v">${fmt(receivable)}</div><div class="l">Balance due (all)</div></div>
   </div>
-  <div class="section-title">Active Sessions <span class="muted" style="text-transform:none">· ${open.length} open </span></div>
-  ${open.length ? open.map(sessionCard).join('') : `<div class="empty">No active sessions.<br><br><button class="btn primary sm" onclick="startSession()">Start Session</button></div>`}
+  <div class="section-title">Active Sessions <span class="muted" style="text-transform:none" id="actCount">· ${open.length} open </span></div>
+  <div id="actList">${open.length ? open.map(sessionCard).join('') : SESS_EMPTY}</div>
   <div class="section-title">Quick Actions</div>
   <div class="qa">
     <button class="btn" onclick="go('expenses')">Add Expense</button>
@@ -1837,11 +1962,11 @@ async function screenDashboard(){
 
 /* ============ Sessions list ============ */
 async function screenGaming(){
-  const all = (await dbAll('bsessions')).sort((a,b)=>b.startTime-a.startTime);
-  const f = state.sessFilter || 'open';
+  const all = memo('sessSorted', ['bsessions'], ()=>dbAllRO('bsessions').slice().sort((a,b)=>b.startTime-a.startTime));
+  const f = state.sessFilter || 'open'; const shown = state.sessShown||PAGE;
   const sel = f==='open' ? all.filter(x=>isOpenStatus(x.status)) : f==='done' ? all.filter(x=>x.status==='finalized'||x.status==='paid') : all.filter(x=>x.status==='cancelled');
-  const chips = [['open','Open'],['done','Billed'],['cancelled','Cancelled']].map(([k,l])=>`<span class="chip ${f===k?'sel':''}" onclick="state.sessFilter='${k}';render()">${l}</span>`).join('');
-  const rows = sel.map(s=>{
+  const chips = [['open','Open'],['done','Billed'],['cancelled','Cancelled']].map(([k,l])=>`<span class="chip ${f===k?'sel':''}" onclick="state.sessFilter='${k}';state.sessShown=PAGE;render()">${l}</span>`).join('');
+  const rows = sel.slice(0,shown).map(s=>{
     if(isOpenStatus(s.status)) return sessionCard(s);
     const t = sessionTotals(s);
     return `<div class="card"><div class="list-item"><div><b>${sesCode(s)}</b>${s.groupName||s.customerName?' · '+esc(s.groupName||s.customerName):''}<br><span class="muted" style="font-size:12px">${new Date(s.startTime).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})} · ${STATUS_LABEL[s.status]}${s.cancelReason?' · '+esc(s.cancelReason):''}</span></div>
@@ -1849,7 +1974,7 @@ async function screenGaming(){
   }).join('');
   return `<button class="btn primary" style="margin-bottom:10px" onclick="startSession()">Start Session</button>
     <div style="margin-bottom:8px">${chips}</div>
-    ${rows || '<div class="empty">Nothing here yet.</div>'}`;
+    ${rows || '<div class="empty">Nothing here yet.</div>'}${sel.length>shown?`<button class="btn" style="margin:6px 0" onclick="state.sessShown=(state.sessShown||PAGE)+PAGE;render()">Show more (${sel.length-shown} more)</button>`:''}`;
 }
 
 /* ============ Checkout (final invoice review) ============ */
@@ -1974,8 +2099,14 @@ async function finalizeCheckout(){
   }catch(e){ if(!e.silent) tell(e.message||String(e)); }
   finally{ state.finalizing=false; const b=document.getElementById('ckFinalize'); if(b){ b.disabled=false; b.style.opacity='1'; } }
 }
-/* The ONE place an invoice is created. Used by checkout and by demo data. */
-async function finalizeSessionCore(f, opts){
+/* The ONE place an invoice is created (checkout). */
+const __finalizing = new Set();
+async function finalizeSessionCore(f, opts){   // one checkout per session at a time: a second tap / retry while one is running is refused, never duplicated
+  if(__finalizing.has(f.sid)) throw Object.assign(new Error('This checkout is already being processed.'), { silent:true });
+  __finalizing.add(f.sid);
+  try{ return await finalizeSessionCoreRun(f, opts); } finally { __finalizing.delete(f.sid); }
+}
+async function finalizeSessionCoreRun(f, opts){
   opts = opts||{};
   const s = await dbGet('bsessions', f.sid);
   if(!s) throw new Error('Session not found.');
@@ -2010,9 +2141,13 @@ async function finalizeSessionCore(f, opts){
   inv.status = invoiceBalance(inv)<=0 ? 'paid' : 'finalized';
   const fresh = await dbGet('bsessions', f.sid);
   if(!fresh || fresh.updatedAt!==s.updatedAt) throw new Error('This session was changed (possibly on another device) while you were checking out. Go back, review the bill, and finalize again.');
-  await createRecord('invoices', inv);
-  // Mark the session billed immediately so a retry/double-tap can never create a second invoice.
-  await mutateSession(f.sid, d=>{ if(d.invoiceId) throw new Error('This session already has an invoice.'); d.lines.forEach(l=>stopLine(l)); d.status=inv.status; d.invoiceId=inv.id; d.invoiceNumber=number; d.finalizedAt=date; return true; });
+  // ONE atomic step: the invoice and the "session is billed" mark are saved together or not at all — a failure can never leave a half-saved invoice,
+  // and a retry / double-tap finds the session already billed and is refused above.
+  inv.id = nextIdLocal('invoices');
+  { const cur = dbGetRO('bsessions', f.sid); if(!cur || !isOpenStatus(cur.status) || cur.invoiceId) throw new Error('This session was already billed.'); }
+  const billed = clean(fresh); billed.lines.forEach(l=>stopLine(l)); billed.status=inv.status; billed.invoiceId=inv.id; billed.invoiceNumber=number; billed.finalizedAt=date; billed.updatedAt=Date.now();
+  await dbBatch([{ put:['invoices',inv] }, { put:['bsessions',billed] }]);
+  updateLiveCache(billed);
   const soft = async (fn)=>{ try{ await fn(); }catch(e){ console.error('post-invoice step failed', e); } };
   await soft(async()=>{
     if(!mob) return;
@@ -2231,21 +2366,24 @@ async function confirmCreditRefund(id){
   try{ await loyaltyReverseForCredit(inv, amt); }catch(e){ console.error('loyalty reversal failed', e); }
   closeModal(); showToast('Saved to the invoice audit trail'); render();
 }
-let __invCache=[];
 function invRowsHtml(list){
   if(!list.length) return '<div class="empty">No invoices found.</div>';
   return list.map(i=>`<div class="card" style="cursor:pointer" onclick="openInvoice(${i.id})"><div class="list-item"><div><b>${esc(i.number)}</b> ${invoiceStatusPill(i)}<br><span class="muted" style="font-size:12px">${esc(i.customerName)} · ${new Date(i.date).toLocaleDateString('en-IN')}</span></div><div style="text-align:right"><b>${fmt(i.grandTotal)}</b></div></div></div>`).join('');
 }
-function filterInvoices(){
+function invSorted(){ return memo('invSorted', ['invoices'], ()=>dbAllRO('invoices').slice().sort((a,b)=>b.date-a.date)); }
+const __hay = new Map();   // invoice id → lowercase search text (rebuilt only for invoices that changed)
+function invHay(i){ const k = i.id+'|'+(i.updatedAt||'')+'|'+i.customerName+'|'+i.customerMobile+'|'+i.number; let h = __hay.get(i.id); if(!h || h.k!==k){ h = { k, t:(i.number+' '+i.customerName+' '+(i.customerMobile||'')).toLowerCase() }; __hay.set(i.id,h); } return h.t; }
+function filterInvoices(reset){
+  if(reset!==false) state.invShown = PAGE;
   const q=(document.getElementById('invSearch')?.value||'').trim().toLowerCase(); const f=state.invFilter||'all';
-  const list=__invCache.filter(i=>(!q||(i.number+' '+i.customerName+' '+(i.customerMobile||'')).toLowerCase().includes(q)) && (f==='all'||(f==='due'&&invoiceBalance(i)>0)||(f==='paid'&&invoiceBalance(i)<=0)));
-  const el=document.getElementById('invList'); if(el) el.innerHTML=invRowsHtml(list.slice(0,200));
+  const list = invSorted().filter(i=>(!q||invHay(i).includes(q)) && (f==='all'||(f==='due'&&invoiceBalance(i)>0)||(f==='paid'&&invoiceBalance(i)<=0)));
+  const n = state.invShown||PAGE;
+  const el=document.getElementById('invList'); if(el) el.innerHTML=invRowsHtml(list.slice(0,n)) + (list.length>n ? `<button class="btn" style="margin:6px 0" onclick="state.invShown+=PAGE;filterInvoices(false)">Show more (${list.length-n} more)</button>` : '');
 }
 async function screenInvoices(){
   const tab = state.invTab||'active';
   const tabs = `<div style="margin-bottom:8px"><span class="chip ${tab==='active'?'sel':''}" id="tabActive" onclick="state.invTab='active';render()">Active</span><span class="chip ${tab==='archive'?'sel':''}" id="tabArchive" onclick="state.invTab='archive';render()">Archive</span></div>`;
   if(tab==='archive') return `<h2>Invoices</h2>${tabs}`+screenInvoiceArchiveHtml();
-  __invCache = (await dbAll('invoices')).sort((a,b)=>b.date-a.date);
   const f = state.invFilter||'all';
   setTimeout(filterInvoices,0);
   return `<h2>Invoices</h2>${tabs}${isAdmin()?`<button class="btn danger" style="margin-bottom:8px" onclick="openAdminInvoices()">Admin: manage / delete invoices</button>`:''}<input id="invSearch" placeholder="Search number, name or mobile" oninput="filterInvoices()" style="margin-bottom:8px">
@@ -2494,24 +2632,28 @@ async function debitAccount(payMethod, amount){
   acc.balance -= amount; await dbPut('accounts', acc);
 }
 /* ============ Customers ============ */
-let __custCache = [];
+const PAGE = 50;
 async function screenCustomers(){
-  __custCache = (await dbAll('customers')).sort((a,b)=>b.totalSpend-a.totalSpend);
+  state.custShown = PAGE;
   return `<h2>Customers</h2>
-  <input id="custSearch" placeholder="Search by name or phone number" oninput="filterCustomers(this.value)" style="margin-bottom:10px">
+  <input id="custSearch" placeholder="Search by name or phone number" oninput="state.custShown=PAGE;filterCustomers(this.value)" style="margin-bottom:10px">
   <button class="btn" style="margin-bottom:10px" onclick="exportCustomersCSV()">Export CSV</button>
-  <div id="custList">${custListHtml(__custCache)}</div>`;
+  <div id="custList">${custPageHtml('')}</div>`;
 }
 function custListHtml(list){
   if(!list.length) return `<div class="empty">No customers found.</div>`;
-  return list.map(c=>`<div class="card" onclick="openCustomer('${c.mobile}')"><div class="list-item"><div><b>${c.name}</b><br><span class="muted">${c.mobile} · ${c.visits} visits</span></div><div class="right">${fmt(c.totalSpend)}</div></div></div>`).join('');
+  return list.map(c=>`<div class="card" onclick="openCustomer('${c.mobile}')"><div class="list-item"><div><b>${esc(c.name)}</b><br><span class="muted">${c.mobile} · ${c.visits} visits</span></div><div class="right">${fmt(c.totalSpend)}</div></div></div>`).join('');
 }
-function filterCustomers(q){
+function custMatchedAll(q){
   q = q.trim().toLowerCase();
-  const filtered = !q ? __custCache : __custCache.filter(c=>c.name.toLowerCase().includes(q) || c.mobile.includes(q));
-  const el = document.getElementById('custList');
-  if(el) el.innerHTML = custListHtml(filtered);
+  const sorted = memo('custBySpend', ['customers'], ()=>dbAllRO('customers').slice().sort((a,b)=>b.totalSpend-a.totalSpend));
+  return !q ? sorted : sorted.filter(c=>String(c.name||'').toLowerCase().includes(q) || String(c.mobile||'').includes(q));
 }
+function custPageHtml(q){
+  const all = custMatchedAll(q), n = state.custShown||PAGE;
+  return custListHtml(all.slice(0,n)) + (all.length>n ? `<button class="btn" style="margin:6px 0" onclick="state.custShown+=PAGE;filterCustomers(document.getElementById('custSearch').value)">Show more (${all.length-n} more)</button>` : '');
+}
+function filterCustomers(q){ const el = document.getElementById('custList'); if(el) el.innerHTML = custPageHtml(q||''); }
 function openCustomer(mobile){ state.custProfile = mobile; go('customerProfile'); }
 /* ============================================================================
    v12 — Loyalty points, Membership plans & free-hours wallet
@@ -2543,7 +2685,7 @@ function loyaltySummary(txs){
   txs.forEach(t=>{ bal+=t.points; if(t.type==='earn'||t.type==='reverse_earn') earned+=t.points; else if(t.type==='redeem'||t.type==='reverse_redeem') redeemed-=t.points; else if(t.type==='expire') expired-=t.points; });
   return { earned:rnd2(earned), redeemed:rnd2(redeemed), expired:rnd2(expired), balance:rnd2(bal) };
 }
-async function loyaltyTxs(mobile){ const a=await dbAll('loyaltyTx'); return (mobile?a.filter(t=>t.mobile===mobile):a).sort((x,y)=>x.ts-y.ts||(x.id-y.id)); }
+async function loyaltyTxs(mobile){ const a=dbAllRO('loyaltyTx'); return clean(mobile?a.filter(t=>t.mobile===mobile):a).sort((x,y)=>x.ts-y.ts||(x.id-y.id)); }   // only this customer's rows are copied
 async function loyaltyExpireSweep(mobile){
   const cfg=loyaltyCfg(); if(!cfg.enabled || !(Number(cfg.expiryDays)>0) || !mobile) return;
   const txs=await loyaltyTxs(mobile), cutoff=Date.now()-cfg.expiryDays*864e5;
@@ -2645,7 +2787,7 @@ function memStatus(m, now){ now=now||Date.now(); if(m.cancelledAt) return 'Cance
 function memUsedMin(m){ return (m.usage||[]).filter(u=>!u.reversed).reduce((z,u)=>z+(Number(u.minutes)||0),0); }
 function memRemainMin(m){ return Math.max(0, Math.round((Number(m.freeHours)||0)*60) - memUsedMin(m)); }
 function memHours(min){ return rnd2(min/60)+'h'; }
-async function activeMembership(mobile){ if(!mobile) return null; const c = await dbGet('customers', mobile); return (await dbAll('memberships')).filter(m=>belongsTo(m,c,mobile) && memStatus(m)==='Active').sort((a,b)=>b.startDate-a.startDate)[0]||null; }
+async function activeMembership(mobile){ if(!mobile) return null; const c = await dbGet('customers', mobile); const m = dbAllRO('memberships').filter(m=>belongsTo(m,c,mobile) && memStatus(m)==='Active').sort((a,b)=>b.startDate-a.startDate)[0]; return m ? clean(m) : null; }
 async function membershipPurchase(o){
   if(!isAdmin()) throw new Error('Only an administrator can sell or assign a membership.');
   const plan = memPlans().find(p=>p.id===o.planId); if(!plan) throw new Error('Choose a membership plan.');
@@ -2851,7 +2993,7 @@ function hash32(str, seed){ let h = (seed===undefined?0x811c9dc5:seed)>>>0; for(
 const hex8 = n=>('00000000'+(n>>>0).toString(16)).slice(-8);
 function cidForMobile(mobile){ const s=String(mobile); return 'C-'+hex8(hash32(s)).toUpperCase()+hex8(hash32(s,0x9747b28c)).toUpperCase(); }   // deterministic: two phones migrating the same customer produce the same ID
 function newCid(){ return 'C-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,8).toUpperCase(); }   // brand-new customers: random, never reused
-async function customerByCid(cid){ if(!cid) return null; return (await dbAll('customers')).find(c=>c.cid===cid)||null; }
+async function customerByCid(cid){ if(!cid) return null; const c = dbAllRO('customers').find(c=>c.cid===cid); return c ? clean(c) : null; }
 async function ensureCid(c){ if(c && !c.cid){ c.cid = cidForMobile(c.mobile); await dbPut('customers', c); } return c ? c.cid : ''; }
 async function cidOfMobile(mob){ if(!mob) return ''; const c = await dbGet('customers', mob); return c ? ensureCid(c) : ''; }
 function belongsTo(rec, c, mobile){ return (c && c.cid && rec.customerId) ? rec.customerId===c.cid : (rec.mobile||rec.customerMobile)===mobile; }
@@ -2865,8 +3007,10 @@ async function dbBatch(ops){   // ops: [{put:[store,val]} | {del:[store,key]}] �
   const f = fb(); const b = f.writeBatch(f.db);
   const prepared = ops.map(o=>{ if(o.put){ const [store,val]=o.put, kp=KEYPATH[store]||'id'; if(val[kp]===undefined||val[kp]===null) throw new Error('A batched record has no ID.'); return { store, key:String(val[kp]), data:clean(val) }; } const [store,key]=o.del; return { store, key:String(key), del:true }; });
   prepared.forEach(p=>{ const ref=f.doc(f.db,p.store,p.key); if(p.del) b.delete(ref); else b.set(ref,p.data); });
+  const touched = new Set();
+  prepared.forEach(p=>{ markLocal(p.store,p.key); touched.add(p.store); if(__ready[p.store]){ if(p.del) __cache[p.store].delete(p.key); else __cache[p.store].set(p.key, clean(p.data)); } });
+  touched.forEach(bumpRev);
   await writeAck(b.commit());
-  prepared.forEach(p=>{ if(__ready[p.store]){ if(p.del) __cache[p.store].delete(p.key); else __cache[p.store].set(p.key, clean(p.data)); } });
 }
 
 /* ---------- the append-only ledger ---------- */
@@ -2887,7 +3031,7 @@ async function ledgerQuery(field, value){   // indexed equality query (Firestore
 const LEDGER_LABEL = { invoice_create:'Invoice created', invoice_payment:'Payment received', invoice_credit:'Credit note', invoice_refund:'Refund', invoice_archive:'Invoice archived', invoice_unarchive:'Invoice un-archived', invoice_delete:'Invoice deleted', invoice_payment_reversal:'Payment reversed', invoice_restore:'Invoice restored', invoice_purge:'Invoice permanently removed',
   loyalty_earn:'Points earned', loyalty_redeem:'Points redeemed', loyalty_reverse_earn:'Points earned — reversed', loyalty_reverse_redeem:'Points redeemed — returned', loyalty_expire:'Points expired',
   membership_purchase:'Membership purchase', membership_complimentary:'Complimentary membership', membership_activation:'Membership activated', membership_cancel:'Membership cancelled', membership_hours_used:'Free hours used', membership_hours_restored:'Free hours restored', membership_discount:'Member discount given', membership_discount_reversed:'Member discount reversed',
-  adjustment:'Adjustment', customer_update:'Customer details changed', restore:'Backup restored', migration:'Schema migration' };
+  customer_purge:'Customer removed (test data)', adjustment:'Adjustment', customer_update:'Customer details changed', restore:'Backup restored', migration:'Schema migration' };
 
 /* ---------- customers ---------- */
 async function customerCreate(o){
@@ -3323,9 +3467,198 @@ function screenAdminTools(){
   return `<button class="btn ghost sm" style="margin-bottom:8px" onclick="goBack('more')">← More</button><h2>Admin Tools</h2><div class="card">
     ${row("openAdminInvoices()",'Invoice management','Delete, restore and review deleted invoices')}
     ${row("go('integrity')",'Data Integrity Check','Find and repair inconsistent records')}
+    ${row("go('cleanup')",'Test-data review','Find and remove leftover demo records — backup first, uncertain ones flagged')}
     ${row("go('ledgerView')",'Transaction ledger','Append-only history of every money, points and hours movement')}
     ${row("state.invTab='archive';go('invoices')",'Invoice archive','Search and manage archived invoices')}
     ${row("go('backup')",'Backup &amp; recovery','Full / section backups, validated restore')}</div>`;
+}
+/* ============================================================================
+   Production clean-up — reviews and removes the records left behind by the old demo-data generator (that generator no longer exists).
+   SAFETY: nothing is ever classified by a name or an amount alone. A record is removed only when it matches the generator's complete
+   fingerprint (several independent fields), is tied to the demo run by the records it links to / the time it was made, and nothing
+   genuine depends on it. Anything that looks test-like but cannot be proven is FLAGGED for Admin review and left untouched.
+   A complete backup is made (and verified) before the first deletion.
+   ============================================================================ */
+const DEMO_NAMES = ['Arun Kumar','Divya S','Rahul M','Priya R','Karthik V'];
+const demoMobile = k=>'90000000'+(10+k);
+const demoPair = (name, mob)=>{ const k = DEMO_NAMES.indexOf(name); return k>=0 && mob===demoMobile(k); };
+const TESTY = /\b(demo|test|sample|dummy)\b/i;
+function demoInvoiceMatches(i, s){
+  const p = i.payments||[];
+  return demoPair(i.customerName, i.customerMobile) && i.sessionId===s.id && !(i.adjustments&&i.adjustments.length) && !i.notes && !i.orderNo && !i.salesperson && !i.subject
+    && p.length===1 && ['UPI','Cash'].includes(p[0].method) && (p[0].amount===i.grandTotal || (p[0].method==='Cash' && p[0].amount===Math.floor(i.grandTotal/2))) && !i.discount && !i.membership && !i.loyaltyValue;
+}
+async function cleanupScan(){
+  const [ses, inv, arc, cus, ven, pur, exp, emp, empTx, mem, lts] = await Promise.all(['bsessions','invoices','archivedInvoices','customers','vendors','purchases','expenses','employees','employeeTx','memberships','loyaltyTx'].map(dbAllFresh));
+  const kept = new Set((state.settings && state.settings.cleanupKept) || []);
+  const C = { sessions:[], invoices:[], customers:[], vendors:[], purchases:[], expenses:[], employees:[], loyaltyTx:[] }, flagged = [];
+  const flag = (store, id, label, reason)=>{ if(!kept.has(store+':'+id) && !flagged.some(f=>f.store===store && String(f.id)===String(id))) flagged.push({ store, id, label, reason }); };
+  const allInv = [...inv, ...arc];
+  // 1) gaming sessions that carry the generator's marker, confirmed against the invoice they produced
+  const demoSes = new Set(), demoInv = new Set(), runTimes = [];
+  for(const s of ses){
+    if(!(s.notes==='Demo' || s.groupName==='Demo group')) continue;
+    let ok = false, i = null;
+    if(s.groupName==='Demo group' && !s.notes && !s.invoiceId && isOpenStatus(s.status) && !s.customerName && !s.customerMobile) ok = true;
+    else if(s.notes==='Demo' && !s.groupName && s.invoiceId){ i = allInv.find(x=>x.id===s.invoiceId); ok = !!i && demoInvoiceMatches(i, s); }
+    if(ok){ demoSes.add(s.id); if(i) demoInv.add(i.id); runTimes.push(s.updatedAt||s.startTime||0); C.sessions.push({ id:s.id, label:sesCode(s) }); if(i) C.invoices.push({ id:i.id, label:i.number+' · '+fmt(i.grandTotal) }); }
+    else flag('bsessions', s.id, sesCode(s), 'Carries the demo marker, but its invoice or contents differ from what the demo generator made (edited, other customer or payment).');
+  }
+  const run = demoSes.size>0; const nearRun = t=>runTimes.some(r=>Math.abs(r-t) < 3*3600*1000);
+  // 2) customers: demo phone + name pair, and every record tied to them came from the demo run
+  const demoMobs = new Set();
+  for(const c of cus){
+    const looks = /^90000000\d\d$/.test(c.mobile) || demoPair(c.name, c.mobile);
+    if(!looks) continue;
+    const myInv = allInv.filter(i=>belongsTo(i, c, c.mobile));
+    const foreign = myInv.filter(i=>!demoInv.has(i.id));
+    const myMem = mem.filter(m=>belongsTo(m, c, c.mobile));
+    const myLoy = lts.filter(t=>t.mobile===c.mobile || (c.cid && t.customerId===c.cid));
+    const foreignLoy = myLoy.filter(t=>!demoInv.has(t.invoiceId));
+    const openSes = ses.filter(s=>s.customerMobile===c.mobile && !demoSes.has(s.id));
+    if(demoPair(c.name, c.mobile) && run && myInv.length>0 && !foreign.length && !myMem.length && !foreignLoy.length && !openSes.length){
+      C.customers.push({ id:c.mobile, label:c.name+' · '+c.mobile }); demoMobs.add(c.mobile); myLoy.forEach(t=>C.loyaltyTx.push({ id:t.id, label:'Loyalty entry for '+c.name }));
+    } else flag('customers', c.mobile, c.name+' · '+c.mobile, !demoPair(c.name,c.mobile) ? 'Phone number looks like a demo number but the name does not match the demo set.' : (!run || !myInv.length) ? 'Matches the demo name and phone, but nothing proves it was created by the demo generator.' : 'Matches the demo customer but also has genuine activity ('+[foreign.length&&foreign.length+' other invoice(s)', myMem.length&&myMem.length+' membership(s)', foreignLoy.length&&foreignLoy.length+' loyalty entr'+(foreignLoy.length>1?'ies':'y'), openSes.length&&openSes.length+' other session(s)'].filter(Boolean).join(', ')+').');
+  }
+  // 3) purchases → vendor
+  const demoVen = v=>v.name==='Chennai Snacks Wholesale' && v.phone==='9876543210' && v.address==='Chennai' && !v.email && !v.gstin;
+  const demoPur = (p,v)=>v && p.vendorId===v.id && p.invoiceNo==='PUR-DEMO-1' && (p.items||[]).length===1 && p.items[0].name==='Classic Fries' && p.items[0].qty===20 && p.items[0].rate===60 && p.total===1200 && p.paymentStatus==='Unpaid' && !(p.payments&&p.payments.length);
+  const vById = new Map(ven.map(v=>[v.id,v]));
+  const okVen = new Set();
+  for(const p of pur){
+    if(p.invoiceNo!=='PUR-DEMO-1') continue;
+    const v = vById.get(p.vendorId);
+    if(run && v && demoVen(v) && demoPur(p, v) && nearRun(p.date||0)){ C.purchases.push({ id:p.id, label:'Purchase '+p.invoiceNo+' · '+fmt(p.total) }); okVen.add(v.id); }
+    else flag('purchases', p.id, 'Purchase '+p.invoiceNo, 'Carries the demo purchase number, but its vendor, items, amount or time do not all match the demo generator.');
+  }
+  for(const v of ven){
+    if(!demoVen(v)) continue;
+    const mine = pur.filter(p=>p.vendorId===v.id), foreign = mine.filter(p=>!C.purchases.some(x=>x.id===p.id));
+    if(okVen.has(v.id) && !foreign.length) C.vendors.push({ id:v.id, label:v.name });
+    else flag('vendors', v.id, v.name, foreign.length ? 'Matches the demo vendor but also has '+foreign.length+' other purchase(s).' : 'Matches the demo vendor, but no demo purchase proves it was generated.');
+  }
+  // 4) expense + employee
+  for(const e of exp){
+    const sig = e.category==='Electricity' && e.desc==='Demo bill' && e.amount===3500 && e.payMethod==='Cash' && !e.isTemplate;
+    if(sig && run && nearRun(e.date||0)) C.expenses.push({ id:e.id, label:'Expense “'+e.desc+'” · '+fmt(e.amount) });
+    else if(sig || TESTY.test(String(e.desc||'')+' '+String(e.notes||''))) flag('expenses', e.id, (e.desc||'Expense')+' · '+fmt(e.amount), sig ? 'Matches the demo expense, but no demo run was found at the same time.' : 'The description contains a test-like word.');
+  }
+  for(const m of emp){
+    const sig = m.name==='Suresh Babu' && m.phone==='9998887771' && m.role==='Staff' && m.joining==='2025-01-01' && m.salary===15000 && m.status==='Active';
+    const tx = empTx.filter(t=>t.employeeId===m.id).length;
+    if(sig && run && !tx) C.employees.push({ id:m.id, label:m.name });
+    else if(sig) flag('employees', m.id, m.name, tx ? 'Matches the demo employee but has '+tx+' payroll record(s).' : 'Matches the demo employee, but no demo run was found.');
+    else if(TESTY.test(m.name||'')) flag('employees', m.id, m.name, 'The name contains a test-like word.');
+  }
+  // 5) everything else that merely LOOKS test-like is only flagged — never deleted by this tool
+  const confirmedIds = (k)=>new Set(C[k].map(x=>String(x.id)));
+  const cs = confirmedIds('sessions'), ci = confirmedIds('invoices'), cc = confirmedIds('customers'), cv = confirmedIds('vendors');
+  ses.forEach(s=>{ if(!cs.has(String(s.id)) && TESTY.test([s.notes,s.groupName,s.customerName].join(' '))) flag('bsessions', s.id, sesCode(s), 'Contains a test-like word in its notes, group or customer name.'); });
+  allInv.forEach(i=>{ if(!ci.has(String(i.id)) && TESTY.test([i.notes,i.subject,i.customerName,i.groupName].join(' '))) flag('invoices', i.id, i.number, 'Contains a test-like word in its notes, subject or customer name.'); });
+  cus.forEach(c=>{ if(!cc.has(String(c.mobile)) && TESTY.test([c.name,c.notes].join(' '))) flag('customers', c.mobile, c.name+' · '+c.mobile, 'The name or notes contain a test-like word.'); });
+  ven.forEach(v=>{ if(!cv.has(String(v.id)) && TESTY.test([v.name,v.notes].join(' '))) flag('vendors', v.id, v.name, 'The name contains a test-like word.'); });
+  return { at:Date.now(), confirmed:C, flagged, total:Object.values(C).reduce((a,l)=>a+l.length,0), run };
+}
+async function cleanupRun(pin){
+  await admAuthorize(pin);
+  const R = await cleanupScan(); const C = R.confirmed;
+  if(!R.total) return { removed:{}, backup:null, issues:0, nothing:true };
+  // ---- 1. complete backup first; nothing is deleted unless it was built, verified and saved ----
+  const data = await buildBackup();
+  const check = validateBackup(JSON.parse(JSON.stringify(data)));
+  if(!check.ok) throw new Error('The safety backup could not be verified, so nothing was deleted. '+check.error);
+  const name = backupFileName().replace('Backup','PreCleanup-Backup');
+  await recoverySave('pre-cleanup', { when:Date.now(), name, data });
+  saveBlobFile(data, name); await recordBackupTime();
+  // ---- 2. delete dependents before the things they depend on ----
+  const removed = { invoices:0, sessions:0, loyaltyTx:0, purchases:0, vendors:0, expenses:0, employees:0, customers:0 }; const days = new Set(); const problems = [];
+  const step = async(label, fn)=>{ try{ await fn(); }catch(e){ console.error('cleanup step failed', label, e); problems.push(label+': '+(e&&e.message||e)); } };
+  for(const x of C.invoices){ await step('invoice '+x.label, async()=>{
+    const inv = await getInvoiceAny(x.id); if(!inv) return; days.add(dateKey(inv.date));
+    await deleteInvoiceCore(x.id, { pin, reason:'Test-data cleanup', sessionMode:'delete', reverseAccounts:true }); await purgeInvoiceCore(x.id, { pin, reason:'Test-data cleanup' }); removed.invoices++; }); }
+  for(const x of C.sessions){ await step('session '+x.label, async()=>{ const s = await dbGet('bsessions', x.id); if(!s) return; if(s.invoiceId && await getInvoiceAny(s.invoiceId)) return; await dbDel('bsessions', x.id); liveSessions = liveSessions.filter(y=>y.id!==x.id); removed.sessions++; }); }
+  // loyalty rows of the removed customers — re-read now, because deleting their invoices just posted reversal rows too
+  const gone = new Set(C.customers.map(x=>x.id));
+  await step('loyalty', async()=>{ for(const t of await dbAllFresh('loyaltyTx')){ if(gone.has(t.mobile)){ await dbDel('loyaltyTx', t.id); removed.loyaltyTx++; } } });
+  for(const x of C.purchases){ await step('purchase', async()=>{ await dbDel('purchases', x.id); removed.purchases++; }); }
+  for(const x of C.vendors){ await step('vendor', async()=>{ await dbDel('vendors', x.id); removed.vendors++; }); }
+  for(const x of C.expenses){ await step('expense', async()=>{ const e = await dbGet('expenses', x.id); if(!e) return; days.add(dateKey(e.date)); await creditAccount(e.payMethod, e.amount); await dbDel('expenses', x.id); removed.expenses++; }); }
+  for(const x of C.employees){ await step('employee', async()=>{ await dbDel('employees', x.id); removed.employees++; }); }
+  for(const x of C.customers){ await step('customer', async()=>{ const c = await dbGet('customers', x.id); if(!c) return; await dbDel('customers', x.id); removed.customers++;
+    await ledgerPost({ type:'customer_purge', customerId:c.cid||'', mobile:c.mobile, description:`Customer ${c.name} removed — confirmed test data`, reason:'Test-data cleanup' }); }); }
+  // ---- 3. recalculate what was derived from the removed records, drop cached summaries ----
+  await step('daily totals', async()=>{ for(const d of days){ await updateDailyRecord(d); const r = await dbGet('dailyRecords', d); if(r && !r.invoiceCount && !r.expenseCount) await dbDel('dailyRecords', d); } });
+  for(const k in __repCache) delete __repCache[k];
+  // ---- 4. orphan check ----
+  let issues = 0; await step('orphan check', async()=>{ const scan = await integrityScan(); issues = scan.issues.reduce((a,g)=>a+g.items.length,0); __integ = scan; });
+  const rest = await cleanupScan();
+  const summary = { at:Date.now(), removed, backup:name, issues, problems, flagged:rest.flagged.length };
+  await patchSettings({ cleanupDone: summary });
+  await createRecord('auditLog', { ts:Date.now(), action:'test_data_cleanup', invoiceId:null, number:'cleanup', amount:0, by:'Admin', reason:'Removed confirmed test data ('+Object.entries(removed).filter(([,n])=>n).map(([k,n])=>n+' '+k).join(', ')+'); backup '+name, removed, problems, flagged:rest.flagged.length });
+  return summary;
+}
+async function cleanupKeep(store, id){
+  const k = store+':'+id; const list = [...((state.settings&&state.settings.cleanupKept)||[])]; if(!list.includes(k)) list.push(k);
+  await patchSettings({ cleanupKept:list }); state.cleanup.scan = null; render();
+}
+/* removing a flagged record is only offered for plain records with nothing depending on them */
+async function cleanupRemoveFlagged(store, id){
+  if(!isAdmin()) return;
+  const f = (state.cleanup.scan.flagged||[]).find(x=>x.store===store && String(x.id)===String(id)); if(!f) return;
+  const pinEl = document.getElementById('clPin'); const pin = pinEl ? pinEl.value : '';
+  if(!(await askConfirm(`Permanently remove “${f.label}”?\n\nA full backup is saved first.`,'Remove',true))) return;
+  try{
+    await admAuthorize(pin);
+    const data = await buildBackup(); const name = backupFileName().replace('Backup','PreCleanup-Backup'); await recoverySave('pre-cleanup', { when:Date.now(), name, data }); saveBlobFile(data, name);
+    if(store==='bsessions'){ const s = await dbGet('bsessions', id); if(s && s.invoiceId) throw new Error('This session has an invoice — remove it from Invoice management instead.'); await dbDel('bsessions', id); liveSessions = liveSessions.filter(y=>String(y.id)!==String(id)); }
+    else if(store==='customers'){ const c = await dbGet('customers', id); const used = (await dbAllFresh('invoices')).some(i=>belongsTo(i,c,id)) || dbAllRO('memberships').some(m=>belongsTo(m,c,id)); if(used) throw new Error('This customer has invoices or memberships — it cannot be removed here.'); await dbDel('customers', id); }
+    else if(store==='vendors'){ if((await dbAllFresh('purchases')).some(p=>String(p.vendorId)===String(id))) throw new Error('This vendor has purchases — remove those first.'); await dbDel('vendors', id); }
+    else if(['expenses','employees','purchases'].includes(store)){ if(store==='expenses'){ const e = await dbGet('expenses', id); if(e){ await creditAccount(e.payMethod, e.amount); await dbDel('expenses', id); await updateDailyRecord(dateKey(e.date)); } } else await dbDel(store, id); }
+    else throw new Error('Open this record in its own screen to remove it.');
+    await createRecord('auditLog', { ts:Date.now(), action:'test_data_cleanup', invoiceId:null, number:'cleanup', amount:0, by:'Admin', reason:'Admin removed flagged record '+f.label+' ('+store+'); backup '+name });
+    state.cleanup.scan = null; showToast('Removed'); render();
+  }catch(e){ tell(e.message||String(e)); }
+}
+async function cleanupScanNow(){ state.cleanup.busy = true; render(); try{ state.cleanup.scan = await cleanupScan(); }catch(e){ tell('Scan failed: '+(e.message||e)); } state.cleanup.busy = false; render(); }
+async function cleanupGo(){
+  if(state.cleanup.running) return; state.cleanup.running = true;
+  const pinEl = document.getElementById('clPin'); const pin = pinEl ? pinEl.value : '';
+  try{
+    if(!(await askConfirm('Remove all CONFIRMED test data?\n\nA complete backup file is made first. Records that cannot be proven to be test data are left untouched.','Back up & remove',true))) return;
+    const b = document.getElementById('clGo'); if(b){ b.disabled = true; b.textContent = 'Backing up…'; }
+    const r = await cleanupRun(pin); state.cleanup.result = r; state.cleanup.scan = null;
+  }catch(e){ tell(e.message||String(e)); }
+  finally{ state.cleanup.running = false; render(); }
+}
+async function screenCleanup(){
+  state.cleanup = state.cleanup || {};
+  const back = `<button class="btn ghost sm" style="margin-bottom:8px" onclick="goBack('adminTools')">← Admin Tools</button><h2>Test-data review</h2>`;
+  if(!isAdmin()) return back+`<div class="card" style="border-color:var(--amber)"><b>Admin only</b></div>`;
+  const S = state.cleanup, done = state.settings.cleanupDone, hasPin = !!state.settings.adminPinHash;
+  const labels = { sessions:'Gaming sessions', invoices:'Invoices (with their payments)', customers:'Customers', loyaltyTx:'Loyalty entries', purchases:'Purchases', vendors:'Vendors', expenses:'Expenses', employees:'Employees' };
+  let h = back + `<div class="card"><div class="muted" style="font-size:13px">Finds records left over from the old demo-data feature and removes only those it can <b>prove</b> are test data. Names or amounts alone are never enough. A complete backup is created first; account balances, daily totals and customer totals are recalculated afterwards, then an orphan check runs. Anything uncertain is listed below for you to review and is not deleted.</div>
+    ${done?`<div class="muted" style="font-size:12px;margin-top:8px">Last clean-up ${fdt(done.at)} · removed ${Object.entries(done.removed||{}).filter(([,n])=>n).map(([k,n])=>n+' '+k).join(', ')||'nothing'} · backup <b>${esc(done.backup||'—')}</b> · integrity issues after: ${done.issues}</div>`:''}</div>`;
+  if(S.result){
+    const r = S.result;
+    h += `<div class="card" style="border-color:var(--green)"><b id="clDone">${r.nothing?'No confirmed test data was found.':'Clean-up finished'}</b>${r.nothing?'':`<div style="font-size:13px;margin-top:6px">${Object.entries(r.removed).filter(([,n])=>n).map(([k,n])=>`${n} ${esc(labels[k]||k).toLowerCase()}`).join(' · ')}<br>Backup saved: <b>${esc(r.backup)}</b><br>Integrity check afterwards: <b>${r.issues?r.issues+' issue(s) — see Data Integrity Check':'no problems'}</b>${r.problems&&r.problems.length?`<br><span style="color:var(--amber)">${r.problems.map(esc).join('<br>')}</span>`:''}</div>`}</div>`;
+  }
+  if(!S.scan) return h + `<button class="btn primary" id="clScan" onclick="cleanupScanNow()" ${S.busy?'disabled':''}>${S.busy?'Scanning…':'Scan for test data'}</button>`;
+  const C = S.scan.confirmed;
+  h += `<div class="section-title">Confirmed test data · ${S.scan.total}</div>`;
+  if(!S.scan.total) h += `<div class="card muted" id="clNone">Nothing was confirmed as test data.</div>`;
+  else {
+    h += `<div class="card">${Object.keys(labels).filter(k=>C[k].length).map(k=>`<div class="list-item"><span>${labels[k]}</span><b>${C[k].length}</b></div><div class="muted" style="font-size:11px;margin:-2px 0 6px">${C[k].slice(0,6).map(x=>esc(x.label)).join(' · ')}${C[k].length>6?' · …':''}</div>`).join('')}</div>
+      ${hasPin?`<label>Admin PIN</label><input id="clPin" type="password" inputmode="numeric" autocomplete="off" placeholder="Admin PIN">`:''}
+      <button class="btn danger" id="clGo" style="margin-top:8px" onclick="cleanupGo()">Back up &amp; remove confirmed test data</button>`;
+  }
+  h += `<div class="section-title">Flagged for Admin review · ${S.scan.flagged.length}</div>`;
+  if(!S.scan.flagged.length) h += `<div class="card muted" id="clNoFlag">Nothing needs review.</div>`;
+  else {
+    if(hasPin && S.scan.total===0) h += `<label>Admin PIN</label><input id="clPin" type="password" inputmode="numeric" autocomplete="off" placeholder="Admin PIN (needed to remove)">`;
+    h += S.scan.flagged.map(f=>`<div class="card" data-flag="${esc(f.store)}:${esc(String(f.id))}"><b>${esc(f.label)}</b> <span class="pill amber">${esc(f.store)}</span><div class="muted" style="font-size:12px;margin:4px 0 8px">${esc(f.reason)}</div>
+      <div class="grid2"><button class="btn sm" onclick="cleanupKeep('${esc(f.store)}','${esc(String(f.id))}')">Keep — it is genuine</button>${f.store==='invoices'?`<button class="btn sm" onclick="openAdminInvoices()">Open in Invoice management</button>`:`<button class="btn sm danger" onclick="cleanupRemoveFlagged('${esc(f.store)}','${esc(String(f.id))}')">Remove</button>`}</div></div>`).join('');
+  }
+  return h + `<button class="btn ghost" style="margin-top:10px" onclick="state.cleanup.scan=null;state.cleanup.result=null;render()">Scan again</button>`;
 }
 async function screenIntegrity(){
   if(!isAdmin()) return `<button class="btn ghost sm" onclick="goBack('adminTools')">← Admin Tools</button><h2>Data Integrity Check</h2><div class="card" style="border-color:var(--amber)"><b>Admin only</b></div>`;
@@ -3788,14 +4121,22 @@ function repExpenses(D, R, F){
   const unpaid = r2(D.purchases.filter(p=>p.paymentStatus!=='Paid' && inR(p.date)).reduce((s,p)=>s+(Number(p.total)||0),0));
   return { rows:out, total, by, unpaid };
 }
+const __repCache = {};
+/* Reports load on demand and are cached per date range. The cache is thrown away the moment any invoice, expense, purchase, vendor,
+   employee, customer or catalogue record changes (revision counters), so a report can never show stale numbers. */
 async function repLoad(start){
-  let invoices = await dbAll('invoices'), partial = false;
+  const stores = ['invoices','expenses','purchases','vendors','employees','employeeTx','customers','products','settings'];
+  const key = start+'|'+revOf(stores); const hit = __repCache[start];
+  if(hit && hit.key===key) return hit.data;
+  let invoices = dbAllRO('invoices'), partial = false;
   if(start < Date.now()-118*86400000){   // older than the live 120-day window → read the whole history
     try{ invoices = await withTimeout(dbAllFresh('invoices'), 9000); }catch(e){ partial = true; }
   }
   if(state.settings && state.settings.hasArchive){ try{ const ar = await withTimeout(archivedSince(start), 9000); const have = new Set(invoices.map(i=>i.id)); invoices = invoices.concat(ar.filter(a=>!have.has(a.id))); }catch(e){ partial = true; } }   // archived invoices stay in historical reports
-  const products = await dbAll('products'); const pm = {}; products.forEach(p=>pm[p.id]=p);
-  return { invoices, pm, partial, expenses:await dbAll('expenses'), purchases:await dbAll('purchases'), vendors:await dbAll('vendors'), employees:await dbAll('employees'), empTx:await dbAll('employeeTx'), customers:await dbAll('customers') };
+  const pm = {}; dbAllRO('products').forEach(p=>pm[p.id]=p);
+  const data = { invoices, pm, partial, expenses:dbAllRO('expenses'), purchases:dbAllRO('purchases'), vendors:dbAllRO('vendors'), employees:dbAllRO('employees'), empTx:dbAllRO('employeeTx'), customers:dbAllRO('customers') };
+  if(!partial){ for(const k in __repCache) if(k!==String(start)) delete __repCache[k]; __repCache[start] = { key, data }; }   // keep only the latest range
+  return data;
 }
 /* ---- time buckets ---- */
 function repGran(rep, R){ if(rep.gran && rep.gran!=='auto') return rep.gran; const to = R.to>R.today?R.today:R.to; const days = Math.round((istStart(to)-istStart(R.from))/86400000)+1; return days<=40?'day':days<=190?'week':'month'; }
@@ -4123,7 +4464,6 @@ function screenMore(){
     ${row("go('settings')",'All Settings')}
     ${isAdmin()?row("go('adminTools')",'Admin Tools','Data integrity check, ledger, archive, invoice management'):''}
   </div>
-  <button class="btn" onclick="loadDemoData()">Load Demo Data</button>
   <button class="btn" style="margin-top:10px" onclick="triggerInstall()">Install App on This Phone</button>
   `;
 }
@@ -4521,6 +4861,15 @@ async function previewRestore(){
 function recoveryDb(){ return new Promise((res,rej)=>{ const r = indexedDB.open('lvl-recovery',1); r.onupgradeneeded = ()=>r.result.createObjectStore('snap'); r.onsuccess = ()=>res(r.result); r.onerror = ()=>rej(r.error); }); }
 async function recoverySave(key, val){ const db = await recoveryDb(); return new Promise((res,rej)=>{ const t = db.transaction('snap','readwrite'); t.objectStore('snap').put(val,key); t.oncomplete = ()=>{ db.close(); res(); }; t.onerror = ()=>rej(t.error); }); }
 async function recoveryLoad(key){ try{ const db = await recoveryDb(); return await new Promise((res,rej)=>{ const q = db.transaction('snap').objectStore('snap').get(key); q.onsuccess = ()=>{ db.close(); res(q.result); }; q.onerror = ()=>rej(q.error); }); }catch(e){ return null; } }
+/* Safe housekeeping: only temporary data is touched — never a business record. */
+async function recoveryDelete(key){ try{ const db = await recoveryDb(); await new Promise(res=>{ const t = db.transaction('snap','readwrite'); t.objectStore('snap').delete(key); t.oncomplete = ()=>{ db.close(); res(); }; t.onerror = ()=>res(); }); }catch(e){} }
+async function housekeeping(){
+  try{
+    const r = await recoveryLoad('pre-cleanup'); if(r && r.when && Date.now()-r.when > 90*864e5) await recoveryDelete('pre-cleanup');   // the downloaded backup file is the long-term copy
+    for(const k in __lw) if(Date.now()-__lw[k] > 10000) delete __lw[k];
+    for(const st of AUTOINC){ const b = lsGet('lvl_idblk_'+st); if(Array.isArray(b)){ const keep = b.filter(x=>x.end>=x.next); if(keep.length!==b.length) lsSet('lvl_idblk_'+st, keep); } }
+  }catch(e){ console.warn('housekeeping', e); }
+}
 /* Write-first-then-prune: every row of the file is written BEFORE anything not in the file is removed, so at no point is data missing. The ledger is append-only and is only ever added to. */
 async function applyDataset(data){
   for(const store of BACKUP_STORES){
@@ -4583,39 +4932,6 @@ async function doClearAll(){
   liveSessions=[]; await loadSettingsAndSeed(); go('dashboard');
 }
 async function screenBackupAsync(){ return screenBackup(); }
-
-/* ============ Demo Data ============ */
-const putSession = async s=>{ s.updatedAt=Date.now(); await dbPut('bsessions', s); updateLiveCache(s); };
-async function loadDemoData(){
-  if(!(await askConfirm('Load sample sessions, invoices, customers, expenses, a vendor and an employee for testing?'))) return;
-  const names = ['Arun Kumar','Divya S','Rahul M','Priya R','Karthik V'];
-  const stations = (await dbAll('stations')).filter(x=>x.active!==false); const prods = await dbAll('products');
-  const byName = n=>prods.find(p=>p.name===n);
-  for(let i=0;i<8;i++){
-    const when = Date.now() - i*5*3600*1000; const stn = stations[i%stations.length]; const players=(i%4)+1; const mins=[60,90,120,150][i%4];
-    const s = { status:'active', startTime:when-mins*60000, groupName:'', notes:'Demo', customerName:'', customerMobile:'', lines:[], nextLineId:1, invoiceId:null };
-    await createRecord('bsessions', s);
-    const r = stn.rates[players];
-    const g = newLine(s,'gaming',{ name:variantName(stn,players), category:stn.category, setupLabel:setupLabel(stn), stationId:stn.id, console:stn.console, tv:stn.tv||'', players, minutes:mins, physicalId:null, physicalName:'', startTime:when-mins*60000, hr:r[0], half:r[1], state:'ended', startedAt:null, elapsedMs:mins*60000, endedAt:when, bucket:'gaming', policySnap:{custom:false,rules:[]} });
-    computeLine(g);
-    if(i%2===0){ computeLine(addItemLine(s, byName('Classic Fries'), null)); computeLine(addItemLine(s, byName('Sprite'), null)); }
-    await putSession(s);
-    const grand = billTotals(s.lines,0,state.settings).grand;
-    await finalizeSessionCore({ sid:s.id, name:names[i%names.length], mobile:'90000000'+(10+i%names.length), discountPct:0, date:ymd(when), terms:'Due on receipt', orderNo:'', salesperson:'', subject:'', notes:'', payments:[{ method:i===7?'Cash':'UPI', amount: i===7? Math.floor(grand/2) : grand }] }, { date: when });
-  }
-  const live = { status:'active', startTime:Date.now()-20*60000, groupName:'Demo group', notes:'', customerName:'', customerMobile:'', lines:[], nextLineId:1, invoiceId:null };
-  await createRecord('bsessions', live);
-  const ps4 = stations[0], rr = ps4.rates[1];
-  computeLine(newLine(live,'gaming',{ name:variantName(ps4,1), category:ps4.category, setupLabel:setupLabel(ps4), stationId:ps4.id, console:ps4.console, tv:ps4.tv||'', players:1, minutes:60, physicalId:null, physicalName:'', startTime:Date.now()-20*60000, hr:rr[0], half:rr[1], state:'running', startedAt:Date.now()-20*60000, elapsedMs:0, endedAt:null, bucket:'gaming', policySnap:durationPolicy() }));
-  computeLine(addItemLine(live, byName('Peri Peri Fries'), null)); await putSession(live);
-  const v = await createRecord('vendors', { name:'Chennai Snacks Wholesale', phone:'9876543210', email:'', address:'Chennai', gstin:'' });
-  await dbPut('purchases', { vendorId:v.id, invoiceNo:'PUR-DEMO-1', date:Date.now(), items:[{productId:byName('Classic Fries').id,name:'Classic Fries',qty:20,rate:60}], subtotal:1200, tax:0, total:1200, paymentStatus:'Unpaid' });
-  await dbPut('expenses', { category:'Electricity', desc:'Demo bill', amount:3500, date:Date.now(), payMethod:'Cash' });
-  await debitAccount('Cash', 3500); await updateDailyRecord(dateKey(Date.now()));
-  await dbPut('employees', { name:'Suresh Babu', phone:'9998887771', role:'Staff', joining:'2025-01-01', salary:15000, status:'Active' });
-  await rebuildDailyRecords();
-  tell('Demo data loaded!'); go('dashboard');
-}
 
 boot();
 </script>
